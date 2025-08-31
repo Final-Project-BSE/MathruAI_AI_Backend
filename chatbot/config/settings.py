@@ -23,6 +23,8 @@ class RAGConfig:
     
     # API Keys
     GROQ_API_KEY: str = os.getenv('GROQ_API_KEY', '')
+    print(".....................................................................................................................................")
+    print(GROQ_API_KEY)
     
     # Model settings
     EMBEDDING_MODEL: str = os.getenv('EMBEDDING_MODEL', 'all-MiniLM-L6-v2')
