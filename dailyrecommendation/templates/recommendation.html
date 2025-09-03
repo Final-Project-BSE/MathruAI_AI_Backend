@@ -1,0 +1,17 @@
+
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Daily Recommendation</h1>
+<p>User ID: {{ user_id }}</p>
+<p>Date: {{ moment().format('YYYY-MM-DD') if moment else '' }}</p>
+
+<div class="recommendation">
+    <h3>Today's Recommendation:</h3>
+    <p>{{ recommendation }}</p>
+</div>
+
+<p><a href="{{ url_for('get_recommendation', user_id=user_id) }}">Refresh</a> | 
+   <a href="{{ url_for('api_get_recommendation', user_id=user_id) }}">API JSON</a></p>
+{% endblock %}
+    
