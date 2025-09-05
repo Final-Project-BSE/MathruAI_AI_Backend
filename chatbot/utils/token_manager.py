@@ -19,7 +19,7 @@ except LookupError:
 class TokenManager:
     """Manages token counting and context truncation."""
     
-    def __init__(self, model_name: str = "llama3-8b-8192", max_context_tokens: int = 3000):
+    def __init__(self, model_name: str = "llama-3.1-8b-instant", max_context_tokens: int = 3000):
         """
         Initialize token manager.
         

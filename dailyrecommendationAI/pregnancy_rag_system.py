@@ -2,11 +2,11 @@ import os
 from datetime import datetime
 from typing import List, Tuple, Dict, Optional
 import logging
-from config import Config
-from database_manager import DatabaseManager
-from vector_database import VectorDatabase
-from pdf_processor import PDFProcessor
-from ai_service import AIService
+from dailyrecommendationAI.config import Config
+from dailyrecommendationAI.database_manager import DatabaseManager
+from dailyrecommendationAI.vector_database import VectorDatabase
+from dailyrecommendationAI.pdf_processor import PDFProcessor
+from dailyrecommendationAI.ai_service import AIService
 
 logger = logging.getLogger(__name__)
 

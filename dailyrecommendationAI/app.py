@@ -1,7 +1,7 @@
 from flask import Flask
 import logging
-from config import Config
-from api_routes import api
+from dailyrecommendationAI.config import Config
+from dailyrecommendationAI.api_routes import api
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

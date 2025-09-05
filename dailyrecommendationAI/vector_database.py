@@ -5,7 +5,7 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 from typing import List, Tuple, Dict
 import logging
-from config import Config
+from dailyrecommendationAI.config import Config
 
 logger = logging.getLogger(__name__)
 

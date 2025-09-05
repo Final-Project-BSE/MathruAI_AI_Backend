@@ -28,7 +28,7 @@ class RAGConfig:
     
     # Model settings
     EMBEDDING_MODEL: str = os.getenv('EMBEDDING_MODEL', 'all-MiniLM-L6-v2')
-    LLM_MODEL: str = os.getenv('LLM_MODEL', 'llama3-8b-8192')
+    LLM_MODEL: str = os.getenv('LLM_MODEL', 'llama-3.1-8b-instant')
     
     # Chunking settings
     CHUNK_SIZE: int = int(os.getenv('CHUNK_SIZE', '800'))

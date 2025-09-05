@@ -2,7 +2,7 @@ import os
 import groq
 from typing import Dict, List
 import logging
-from config import Config
+from dailyrecommendationAI.config import Config
 
 logger = logging.getLogger(__name__)
 

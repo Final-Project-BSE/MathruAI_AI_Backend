@@ -4,7 +4,7 @@ import nltk
 from nltk.tokenize import sent_tokenize, word_tokenize
 from typing import List, Tuple
 import logging
-from config import Config
+from dailyrecommendationAI.config import Config
 
 # Download required NLTK data
 try:

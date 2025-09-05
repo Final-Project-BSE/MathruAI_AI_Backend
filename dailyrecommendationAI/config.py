@@ -4,14 +4,13 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Configuration settings
 class Config:
     # Flask settings
     SECRET_KEY = os.getenv('SECRET_KEY', 'your-secret-key-here')
     DEBUG = True
     PORT = 5000
     
-    # File upload settings
+    # File upload settings - THESE WERE MISSING AND CAUSING THE ERROR
     UPLOAD_FOLDER = 'uploads'
     VECTOR_DB_PATH = 'vector_db'
     ALLOWED_EXTENSIONS = {'pdf'}
@@ -35,6 +34,6 @@ class Config:
     CHUNK_OVERLAP = 50
     
     # AI model settings
-    GROQ_MODEL = "llama3-8b-8192"
+    GROQ_MODEL = "llama-3.1-8b-instant"
     MAX_TOKENS = 200
     TEMPERATURE = 0.7

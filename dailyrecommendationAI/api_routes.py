@@ -3,13 +3,13 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify
 from werkzeug.utils import secure_filename
 import logging
-from config import Config
-from pregnancy_rag_system import PregnancyRAGSystem
+from dailyrecommendationAI.config import Config
+from dailyrecommendationAI.pregnancy_rag_system import PregnancyRAGSystem
 
 logger = logging.getLogger(__name__)
 
-# Create blueprint for API routes
-api = Blueprint('api', __name__, url_prefix='/api')
+# Create blueprint for API routes - REMOVE the /api prefix since it will be added by main.py
+api = Blueprint('api', __name__)
 
 # Initialize RAG system
 rag_system = PregnancyRAGSystem()

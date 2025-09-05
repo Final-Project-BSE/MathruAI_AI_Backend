@@ -3,7 +3,7 @@ from mysql.connector import Error
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List
 import logging
-from config import Config
+from dailyrecommendationAI.config import Config
 
 logger = logging.getLogger(__name__)
 
