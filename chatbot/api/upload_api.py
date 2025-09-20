@@ -1,5 +1,5 @@
 """
-File upload and document processing API endpoints.
+File upload and document processing API endpoints - FIXED VERSION.
 """
 from flask import Blueprint, request, current_app
 from werkzeug.utils import secure_filename
@@ -13,11 +13,14 @@ from chatbot.utils.response_utils import (
     validate_rag_system,
     log_api_request
 )
-from chatbot.core.app import allowed_file
 
 upload_bp = Blueprint('upload', __name__)
 logger = logging.getLogger(__name__)
 
+def allowed_file(filename, app):
+    """Check if file has allowed extension."""
+    return ('.' in filename and 
+            filename.rsplit('.', 1)[1].lower() in app.config.get('ALLOWED_EXTENSIONS', set()))
 
 @upload_bp.route('/upload', methods=['POST'])
 def upload_pdf():
@@ -84,6 +87,56 @@ def upload_pdf():
             
         logger.error(f"Error processing PDF upload: {str(e)}")
         return create_error_response(f"Failed to process PDF: {str(e)}")
+
+@upload_bp.route('/upload/status', methods=['GET'])
+def upload_status():
+    """Get upload status and processing capabilities."""
+    log_api_request('/upload/status', 'GET', request.remote_addr)
+    
+    try:
+        upload_folder = current_app.config['UPLOAD_FOLDER']
+        max_file_size = current_app.config['MAX_CONTENT_LENGTH']
+        allowed_extensions = current_app.config['ALLOWED_EXTENSIONS']
+        
+        # Get upload folder info
+        upload_info = {
+            "upload_folder_exists": os.path.exists(upload_folder),
+            "max_file_size_bytes": max_file_size,
+            "max_file_size_mb": round(max_file_size / (1024 * 1024), 2),
+            "allowed_extensions": list(allowed_extensions),
+            "upload_folder": upload_folder
+        }
+        
+        # Check available disk space (if folder exists)
+        if os.path.exists(upload_folder):
+            try:
+                import shutil
+                _, _, free = shutil.disk_usage(upload_folder)
+                upload_info["available_disk_space_bytes"] = free
+                upload_info["available_disk_space_mb"] = round(free / (1024 * 1024), 2)
+            except (OSError, AttributeError):
+                upload_info["available_disk_space"] = "unavailable"
+        
+        # RAG system readiness
+        is_valid, error_msg = validate_rag_system(current_app.rag_system)
+        upload_info["rag_system_ready"] = is_valid
+        if not is_valid:
+            upload_info["rag_system_error"] = error_msg
+        
+        return create_success_response({
+            "upload_capabilities": upload_info,
+            "processing_features": [
+                "PDF text extraction",
+                "Smart text chunking",
+                "FAISS vector indexing",
+                "Knowledge base integration",
+                "Batch processing support"
+            ]
+        }, "Upload status retrieved successfully")
+        
+    except Exception as e:
+        logger.error(f"Error getting upload status: {str(e)}")
+        return create_error_response(f"Failed to get upload status: {str(e)}")
 
 
 @upload_bp.route('/upload/batch', methods=['POST'])
@@ -181,61 +234,7 @@ def upload_batch():
     except Exception as e:
         logger.error(f"Error in batch upload: {str(e)}")
         return create_error_response(f"Batch upload failed: {str(e)}")
-
-
-@upload_bp.route('/upload/status', methods=['GET'])
-def upload_status():
-    """
-    Get upload status and processing capabilities.
-    New endpoint for future upload monitoring.
-    """
-    log_api_request('/upload/status', 'GET', request.remote_addr)
-    
-    try:
-        upload_folder = current_app.config['UPLOAD_FOLDER']
-        max_file_size = current_app.config['MAX_CONTENT_LENGTH']
-        allowed_extensions = current_app.config['ALLOWED_EXTENSIONS']
         
-        # Get upload folder info
-        upload_info = {
-            "upload_folder_exists": os.path.exists(upload_folder),
-            "max_file_size_bytes": max_file_size,
-            "max_file_size_mb": round(max_file_size / (1024 * 1024), 2),
-            "allowed_extensions": list(allowed_extensions),
-            "upload_folder": upload_folder
-        }
-        
-        # Check available disk space (if folder exists)
-        if os.path.exists(upload_folder):
-            try:
-                stat = os.statvfs(upload_folder)
-                available_space = stat.f_frsize * stat.f_bavail
-                upload_info["available_disk_space_bytes"] = available_space
-                upload_info["available_disk_space_mb"] = round(available_space / (1024 * 1024), 2)
-            except (OSError, AttributeError):
-                # statvfs not available on Windows
-                upload_info["available_disk_space"] = "unavailable"
-        
-        # RAG system readiness
-        is_valid, error_msg = validate_rag_system(current_app.rag_system)
-        upload_info["rag_system_ready"] = is_valid
-        if not is_valid:
-            upload_info["rag_system_error"] = error_msg
-        
-        return create_success_response({
-            "upload_capabilities": upload_info,
-            "processing_features": [
-                "PDF text extraction",
-                "Smart text chunking",
-                "FAISS vector indexing",
-                "Knowledge base integration",
-                "Batch processing support"
-            ]
-        }, "Upload status retrieved successfully")
-        
-    except Exception as e:
-        logger.error(f"Error getting upload status: {str(e)}")
-        return create_error_response(f"Failed to get upload status: {str(e)}")
 
 
 @upload_bp.route('/upload/history', methods=['GET'])

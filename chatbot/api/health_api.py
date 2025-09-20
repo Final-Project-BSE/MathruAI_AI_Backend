@@ -1,21 +1,19 @@
 """
-Health check and system status API endpoints.
+Health check and system status API endpoints - FIXED VERSION.
 """
-from flask import Blueprint, current_app, jsonify
+from flask import Blueprint, current_app, jsonify, request
 from datetime import datetime
 import logging
-import traceback
 
 from chatbot.utils.response_utils import create_success_response, create_error_response, log_api_request
 
 health_bp = Blueprint('health', __name__)
 logger = logging.getLogger(__name__)
 
-
 @health_bp.route('/', methods=['GET'])
-def index():
+def api_index():
     """API documentation and status."""
-    log_api_request('/', 'GET', request.remote_addr if 'request' in globals() else 'unknown')
+    log_api_request('/', 'GET', request.remote_addr)
     
     system_status = "healthy" if current_app.rag_system else "unhealthy"
     
@@ -37,15 +35,15 @@ def index():
             "Modular API structure for easy extension"
         ],
         "endpoints": {
-            "/": "GET - API documentation and status",
-            "/health": "GET - Comprehensive system health check",
-            "/stats": "GET - Knowledge base and system statistics",
-            "/chat": "POST - Interactive chat with AI assistant",
-            "/chats": "GET - Get list of chat sessions, POST - Create new chat session",
-            "/chats/<session_id>": "GET - Get chat history, DELETE - Delete chat session",
-            "/search": "POST - Advanced semantic search",
-            "/upload": "POST - Upload and process PDF documents",
-            "/reinitialize": "POST - Reinitialize RAG system (admin)"
+            "/api/": "GET - API documentation and status",
+            "/api/health": "GET - Comprehensive system health check", 
+            "/api/stats": "GET - Knowledge base and system statistics",
+            "/api/chat": "POST - Interactive chat with AI assistant",
+            "/api/chats": "GET - Get list of chat sessions, POST - Create new chat session",
+            "/api/chats/<session_id>": "GET - Get chat history, DELETE - Delete chat session",
+            "/api/search": "POST - Advanced semantic search",
+            "/api/upload": "POST - Upload and process PDF documents",
+            "/api/upload/status": "GET - Upload system status"
         },
         "parameter_specs": {
             "chat_parameters": {
@@ -71,11 +69,10 @@ def index():
     
     return jsonify(api_info)
 
-
 @health_bp.route('/health', methods=['GET'])
 def health_check():
     """Comprehensive health check."""
-    log_api_request('/health', 'GET', request.remote_addr if 'request' in globals() else 'unknown')
+    log_api_request('/health', 'GET', request.remote_addr)
     
     health_info = {
         "status": "healthy",
@@ -95,7 +92,7 @@ def health_check():
                 "faiss_index": {
                     "status": "healthy" if stats["faiss_index_size"] > 0 else "empty",
                     "vectors": stats["faiss_index_size"],
-                    "dimension": stats["embedding_dimension"]
+                    "dimension": stats.get("embedding_dimension", "unknown")
                 },
                 "database": {
                     "status": "healthy" if stats["database_connected"] else "disconnected",
@@ -104,6 +101,10 @@ def health_check():
                 "embedding_model": {
                     "status": "healthy",
                     "model": stats["embedding_model"]
+                },
+                "authentication": {
+                    "status": "healthy" if hasattr(current_app, 'auth_utils') else "not_configured",
+                    "configured": hasattr(current_app, 'auth_utils')
                 }
             }
             
@@ -124,11 +125,10 @@ def health_check():
     status_code = 200 if health_info["status"] in ["healthy", "degraded"] else 503
     return jsonify(health_info), status_code
 
-
 @health_bp.route('/stats', methods=['GET'])
 def get_stats():
     """Get comprehensive system statistics."""
-    log_api_request('/stats', 'GET', request.remote_addr if 'request' in globals() else 'unknown')
+    log_api_request('/stats', 'GET', request.remote_addr)
     
     if not current_app.rag_system:
         return create_error_response("RAG system not initialized", 503)
@@ -154,6 +154,14 @@ def get_stats():
                 "embedding_model": stats.get("embedding_model", "all-MiniLM-L6-v2"),
                 "embedding_dimension": stats.get("embedding_dimension", 384),
                 "index_type": "FAISS IndexFlatIP with IDMap"
+            },
+            "database_status": {
+                "connected": stats.get("database_connected", False),
+                "manager_available": hasattr(current_app, 'db_manager') and current_app.db_manager is not None
+            },
+            "authentication": {
+                "configured": hasattr(current_app, 'auth_utils'),
+                "jwt_secret_configured": bool(current_app.config.get('JWT_SECRET_KEY'))
             }
         }
         
@@ -166,35 +174,41 @@ def get_stats():
         logger.error(f"Error getting stats: {str(e)}")
         return create_error_response(f"Failed to retrieve stats: {str(e)}")
 
-
-@health_bp.route('/reinitialize', methods=['POST'])
-def reinitialize_system():
-    """Reinitialize RAG system (admin endpoint)."""
-    log_api_request('/reinitialize', 'POST', request.remote_addr if 'request' in globals() else 'unknown')
+@health_bp.route('/debug', methods=['GET'])
+def debug_info():
+    """Get debug information about the system."""
+    log_api_request('/debug', 'GET', request.remote_addr)
     
-    try:
-        logger.info("Reinitializing RAG system...")
-        
-        # Close existing system if available
-        if current_app.rag_system:
-            try:
-                current_app.rag_system.__del__()
-            except:
-                pass
-        
-        # Reinitialize
-        from core.app import initialize_rag_system
-        current_app.rag_system = initialize_rag_system()
-        
-        if current_app.rag_system:
-            stats = current_app.rag_system.get_system_stats()
-            return create_success_response({
-                "reinitialized": True,
-                "stats": stats
-            }, "RAG system reinitialized successfully")
-        else:
-            return create_error_response("Failed to reinitialize RAG system", 500)
-            
-    except Exception as e:
-        logger.error(f"Error reinitializing system: {str(e)}")
-        return create_error_response(f"Reinitialization failed: {str(e)}")
+    debug_info = {
+        "flask_app_configured": True,
+        "rag_system": {
+            "initialized": hasattr(current_app, 'rag_system') and current_app.rag_system is not None,
+            "type": type(current_app.rag_system).__name__ if hasattr(current_app, 'rag_system') else None
+        },
+        "database": {
+            "manager_initialized": hasattr(current_app, 'db_manager') and current_app.db_manager is not None,
+            "connection_available": (hasattr(current_app, 'db_manager') and 
+                                   current_app.db_manager and 
+                                   current_app.db_manager.connection is not None)
+        },
+        "authentication": {
+            "auth_utils_initialized": hasattr(current_app, 'auth_utils'),
+            "jwt_secret_key_set": bool(current_app.config.get('JWT_SECRET_KEY'))
+        },
+        "upload_config": {
+            "upload_folder": current_app.config.get('UPLOAD_FOLDER'),
+            "allowed_extensions": current_app.config.get('ALLOWED_EXTENSIONS'),
+            "max_file_size": current_app.config.get('MAX_FILE_SIZE')
+        },
+        "registered_blueprints": [bp.name for bp in current_app.blueprints.values()],
+        "routes": [
+            {
+                "rule": str(rule),
+                "endpoint": rule.endpoint,
+                "methods": list(rule.methods)
+            }
+            for rule in current_app.url_map.iter_rules()
+        ]
+    }
+    
+    return create_success_response(debug_info, "Debug information retrieved successfully")

@@ -1,5 +1,5 @@
 """
-Combined main application entry point.
+Combined main application entry point - FIXED VERSION.
 Runs both Maternal Risk Prediction API and Enhanced RAG API Server together.
 """
 import os
@@ -20,6 +20,154 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+
+def load_rag_system(app):
+    """Load RAG system with proper error handling - FIXED VERSION"""
+    try:
+        logger.info("Loading RAG system...")
+        
+        # Import the correct chat blueprint from chat_api.py
+        from chatbot.api.chat_api import chat_bp
+        from chatbot.database.manager import DatabaseManager
+        from chatbot.utils.AuthUtils import AuthUtils
+        from chatbot.api.upload_api import upload_bp
+
+        
+        # Initialize authentication for RAG system
+        # Add to create_combined_app() function
+        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-secure-jwt-secret-key')
+        logger.info(f"JWT Secret preview: {app.config['JWT_SECRET_KEY'][:]}...")
+        auth_utils = AuthUtils(app.config['JWT_SECRET_KEY'])
+        app.auth_utils = auth_utils
+        
+        # Initialize database manager
+        try:
+            db_manager = DatabaseManager()
+            app.db_manager = db_manager
+            logger.info("✓ RAG Database manager initialized")
+        except Exception as e:
+            logger.error(f"Failed to initialize RAG database manager: {e}")
+            app.db_manager = None
+        
+        # Initialize proper RAG system (replace MockRAGSystem with your actual implementation)
+        try:
+            # Import your actual RAG system
+            from chatbot.core.rag_system import VectorRAGSystem
+            
+            rag_system = VectorRAGSystem(
+                embedding_model='all-MiniLM-L6-v2',
+                chunk_size=1000,
+                chunk_overlap=200
+            )
+            rag_system.db_manager = db_manager
+            app.rag_system = rag_system
+            logger.info("✓ RAG system initialized")
+        except ImportError:
+            logger.warning("VectorRAGSystem not found, using mock system")
+            # Fallback to mock system if actual RAG system is not available
+            class MockRAGSystem:
+                def __init__(self, db_manager):
+                    self.db_manager = db_manager
+                
+                def generate_response(self, query):
+                    return f"RAG Mock response for: {query}"
+                
+                def find_relevant_context(self, query, top_k=3, similarity_threshold=0.1):
+                    return []
+                
+                def get_system_stats(self):
+                    return {
+                        'total_chunks': 0,
+                        'faiss_index_size': 0,
+                        'database_connected': self.db_manager and self.db_manager.connection is not None,
+                        'embedding_model': 'mock'
+                    }
+            
+            app.rag_system = MockRAGSystem(db_manager)
+            logger.info("✓ Mock RAG system initialized")
+        except Exception as e:
+            logger.error(f"Failed to initialize RAG system: {e}")
+            app.rag_system = None
+        
+        # Register RAG chat blueprint with /rag prefix - THIS IS THE KEY FIX
+        app.register_blueprint(chat_bp, url_prefix='/api')
+        logger.info("✓ RAG chat blueprint registered with /rag prefix")
+
+        app.register_blueprint(upload_bp, url_prefix='/api')
+        logger.info("✓ RAG upload blueprint registered with /rag prefix")
+        
+        # Add additional RAG endpoints
+        from flask import Blueprint
+        rag_extra_bp = Blueprint('rag_extra', __name__)
+        
+        @rag_extra_bp.route('/')
+        def rag_documentation():
+            return jsonify({
+                "service": "Enhanced RAG API",
+                "version": "2.0",
+                "endpoints": [
+                    "GET  /rag/ - This documentation",
+                    "GET  /rag/health - RAG system health check",
+                    "GET  /rag/stats - RAG system statistics",
+                    "POST /rag/chat - Interactive chat with authentication",
+                    "GET  /rag/chats - List user's chat sessions",
+                    "POST /rag/chats - Create new chat session",
+                    "GET  /rag/chats/<id> - Get chat history",
+                    "DELETE /rag/chats/<id> - Delete chat session",
+                    "GET  /rag/user/stats - User statistics"
+                ]
+            })
+        
+        @rag_extra_bp.route('/health')
+        def rag_health():
+            health_info = {
+                "status": "healthy",
+                "system": "rag",
+                "database_connected": False,
+                "auth_configured": hasattr(app, 'auth_utils'),
+                "rag_system_loaded": hasattr(app, 'rag_system') and app.rag_system is not None
+            }
+            
+            if hasattr(app, 'rag_system') and app.rag_system:
+                try:
+                    stats = app.rag_system.get_system_stats()
+                    health_info.update({
+                        "database_connected": stats.get('database_connected', False),
+                        "total_chunks": stats.get('total_chunks', 0),
+                        "embedding_model": stats.get('embedding_model', 'unknown')
+                    })
+                except Exception as e:
+                    health_info["error"] = str(e)
+            
+            return jsonify(health_info)
+        
+        @rag_extra_bp.route('/stats')
+        def rag_stats():
+            if not hasattr(app, 'rag_system') or not app.rag_system:
+                return jsonify({"error": "RAG system not available"}), 503
+            
+            try:
+                stats = app.rag_system.get_system_stats()
+                return jsonify(stats)
+            except Exception as e:
+                return jsonify({"error": str(e)}), 500
+        
+        # Register the extra endpoints
+        app.register_blueprint(rag_extra_bp, url_prefix='/api')
+        
+        logger.info("✓ RAG system loaded successfully")
+        return True
+        
+    except ImportError as e:
+        logger.warning(f"RAG system not available - missing import: {e}")
+        logger.warning("Make sure chatbot.api.chat_api module exists and contains chat_bp")
+        return False
+    except Exception as e:
+        logger.error(f"Error loading RAG system: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
 
 
 def test_maternal_imports():
@@ -109,45 +257,11 @@ def load_maternal_system(app):
         return False
 
 
-def load_rag_system(app):
-    """Load RAG system with proper error handling"""
-    try:
-        # Import RAG app factory
-        from chatbot.core.app import create_app as create_rag_app
-        
-        # Create RAG app to get its blueprints
-        rag_app = create_rag_app()
-        
-        # Copy RAG system reference
-        if hasattr(rag_app, 'rag_system'):
-            app.rag_system = rag_app.rag_system
-            
-        # Register RAG blueprints with prefix
-        for blueprint_name, blueprint in rag_app.blueprints.items():
-            # Create a new blueprint with prefix
-            if not blueprint_name.startswith('rag_'):
-                new_blueprint_name = f"rag_{blueprint_name}"
-            else:
-                new_blueprint_name = blueprint_name
-                
-            # Register with /rag prefix
-            app.register_blueprint(blueprint, url_prefix='/rag', name=new_blueprint_name)
-            
-        logger.info("✓ RAG system loaded successfully")
-        return True
-        
-    except ImportError as e:
-        logger.warning(f"RAG system not available: {e}")
-        return False
-    except Exception as e:
-        logger.error(f"Error loading RAG system: {e}")
-        return False
-
-
 def load_pregnancy_rag_system(app):
     """Load Pregnancy RAG system with proper error handling"""
     try:
         logger.info("Loading Pregnancy RAG system...")
+        
         
         # Import the pregnancy RAG system directly
         from dailyrecommendationAI.api_routes import api as pregnancy_api_blueprint, rag_system
@@ -235,14 +349,12 @@ def create_combined_app():
                 "GET /rag/ - RAG API documentation",
                 "GET /rag/health - System health check",
                 "GET /rag/stats - System statistics", 
-                "POST /rag/chat - Interactive chat",
-                "GET /rag/chats - List chat sessions",
+                "POST /rag/chat - Interactive chat with authentication",
+                "GET /rag/chats - List user chat sessions",
                 "POST /rag/chats - Create chat session",
                 "GET /rag/chats/<id> - Get chat history",
                 "DELETE /rag/chats/<id> - Delete chat session",
-                "POST /rag/search - Semantic search",
-                "POST /rag/upload - Upload PDF documents",
-                "POST /rag/reinitialize - Reinitialize system"
+                "GET /rag/user/stats - User statistics"
             ]
             
         if pregnancy_available:
@@ -304,7 +416,8 @@ def create_combined_app():
                     "status": "healthy",
                     "knowledge_base_chunks": stats.get('total_chunks', 0),
                     "database_connected": stats.get('database_connected', False),
-                    "embedding_model": stats.get('embedding_model', 'unknown')
+                    "embedding_model": stats.get('embedding_model', 'unknown'),
+                    "auth_configured": hasattr(app, 'auth_utils')
                 }
             except Exception as e:
                 health_status["systems"]["rag"] = {
@@ -395,8 +508,8 @@ def print_startup_info(app_type, app):
             try:
                 stats = app.rag_system.get_system_stats()
                 logger.info(f"Knowledge Base: {stats['total_chunks']} chunks")
-                logger.info(f"FAISS Index: {stats['faiss_index_size']} vectors")
                 logger.info(f"Database: {'Connected' if stats['database_connected'] else 'Disconnected'}")
+                logger.info(f"Auth: {'Configured' if hasattr(app, 'auth_utils') else 'Not Configured'}")
             except Exception as e:
                 logger.warning(f"Could not retrieve RAG system stats: {e}")
         
@@ -417,79 +530,20 @@ def print_startup_info(app_type, app):
         logger.info("  GET  /health               - Combined health check")
         logger.info("  GET  /debug/routes         - List all routes (debug)")
         logger.info("")
-        logger.info("Maternal Risk Prediction (prefixed with /maternal):")
-        logger.info("  POST /maternal/predict           - Full risk and advice prediction")
-        logger.info("  POST /maternal/predict-risk-only - Risk prediction only")
-        logger.info("  GET  /maternal/model-info        - Model information")
-        logger.info("  GET  /maternal/health            - Health check")
-        logger.info("")
         logger.info("Enhanced RAG API (prefixed with /rag):")
         logger.info("  GET  /rag/                 - RAG API documentation")
         logger.info("  GET  /rag/health           - System health check")
         logger.info("  GET  /rag/stats            - System statistics")
-        logger.info("  POST /rag/chat             - Interactive chat")
-        logger.info("  POST /rag/search           - Semantic search")
-        logger.info("  POST /rag/upload           - Upload PDF documents")
+        logger.info("  POST /rag/chat             - Interactive chat (requires auth)")
+        logger.info("  GET  /rag/chats            - List user chat sessions (requires auth)")
+        logger.info("  POST /rag/chats            - Create chat session (requires auth)")
+        logger.info("  GET  /rag/chats/<id>       - Get chat history (requires auth)")
+        logger.info("  DELETE /rag/chats/<id>     - Delete chat session (requires auth)")
+        logger.info("  GET  /rag/user/stats       - User statistics (requires auth)")
         logger.info("")
-        logger.info("Pregnancy RAG API (prefixed with /pregnancy):")
-        logger.info("  GET  /pregnancy/health                        - Health check")
-        logger.info("  POST /pregnancy/register                      - Register new user")
-        logger.info("  GET  /pregnancy/user/<user_id>                - Get user info")
-        logger.info("  PUT  /pregnancy/user/<user_id>                - Update user")
-        logger.info("  GET  /pregnancy/recommendation/<user_id>      - Get recommendation")
-        logger.info("  POST /pregnancy/search                        - Search knowledge base")
-        logger.info("  GET  /pregnancy/recommendations/history/<user_id> - Get history")
-        logger.info("  POST /pregnancy/upload-pdf                    - Upload PDF")
-        logger.info("  GET  /pregnancy/stats                         - System statistics")
-        logger.info("  GET  /pregnancy/debug/recommendation/<user_id> - Debug endpoint")
+        logger.info("NOTE: RAG endpoints require JWT authentication in Authorization header")
         
-    elif app_type == 'maternal':
-        logger.info("Maternal Risk & Advice Prediction API")
-        logger.info("=" * 70)
-        logger.info("Maternal Risk Prediction Endpoints:")
-        logger.info("  POST /maternal/predict           - Full risk and advice prediction")
-        logger.info("  POST /maternal/predict-risk-only - Risk prediction only")
-        logger.info("  GET  /maternal/model-info        - Model information")
-        logger.info("  GET  /maternal/health            - Health check")
-        
-    elif app_type == 'rag':
-        logger.info("Enhanced RAG API Server")
-        logger.info("=" * 70)
-        logger.info(f"RAG System Status: {'Ready' if hasattr(app, 'rag_system') and app.rag_system else 'Not Ready'}")
-        
-        # Print RAG stats if available
-        if hasattr(app, 'rag_system') and app.rag_system:
-            try:
-                stats = app.rag_system.get_system_stats()
-                logger.info(f"Knowledge Base: {stats['total_chunks']} chunks")
-                logger.info(f"FAISS Index: {stats['faiss_index_size']} vectors")
-                logger.info(f"Database: {'Connected' if stats['database_connected'] else 'Disconnected'}")
-            except Exception as e:
-                logger.warning(f"Could not retrieve RAG system stats: {e}")
-        
-        logger.info("Enhanced RAG API Endpoints:")
-        logger.info("  GET  /rag/                  - API documentation")
-        logger.info("  GET  /rag/health            - System health check")
-        logger.info("  GET  /rag/stats             - System statistics")
-        logger.info("  POST /rag/chat              - Interactive chat")
-        logger.info("  POST /rag/search            - Semantic search")
-        logger.info("  POST /rag/upload            - Upload PDF documents")
-        
-    elif app_type == 'pregnancy':
-        logger.info("Pregnancy RAG API Server")
-        logger.info("=" * 70)
-        logger.info("Pregnancy RAG System Status: Ready")
-        logger.info("Pregnancy RAG API Endpoints:")
-        logger.info("  GET  /pregnancy/health                        - Health check")
-        logger.info("  POST /pregnancy/register                      - Register new user")
-        logger.info("  GET  /pregnancy/user/<user_id>                - Get user info")
-        logger.info("  PUT  /pregnancy/user/<user_id>                - Update user")
-        logger.info("  GET  /pregnancy/recommendation/<user_id>      - Get recommendation")
-        logger.info("  POST /pregnancy/search                        - Search knowledge base")
-        logger.info("  GET  /pregnancy/recommendations/history/<user_id> - Get history")
-        logger.info("  POST /pregnancy/upload-pdf                    - Upload PDF")
-        logger.info("  GET  /pregnancy/stats                         - System statistics")
-        logger.info("  GET  /pregnancy/debug/recommendation/<user_id> - Debug endpoint")
+    logger.info("=" * 70)
 
 
 def main():
@@ -517,6 +571,7 @@ def main():
         logger.info(f"Application Type: {app_type}")
         logger.info("=" * 70)
         logger.info("TIP: Visit /debug/routes to see all registered routes")
+        logger.info("TIP: Visit /rag/health to check RAG system status")
         logger.info("=" * 70)
         
         # Start the Flask development server
