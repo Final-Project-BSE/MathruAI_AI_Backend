@@ -85,6 +85,7 @@ class PregnancyRAGSystem:
             else:
                 logger.info("No context chunks found, using fallback recommendation")
                 recommendation = self.ai_service.get_fallback_recommendation(user)
+                
             
             # Save recommendation
             self.database_manager.save_recommendation(user_id, recommendation, today)

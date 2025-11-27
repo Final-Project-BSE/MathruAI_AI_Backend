@@ -21,6 +21,7 @@ from chatbot.utils.AuthUtils import require_auth
 chat_bp = Blueprint('chat', __name__)
 logger = logging.getLogger(__name__)
 
+#debugging
 @chat_bp.route('/debug-secret', methods=['GET'])
 def debug_secret():
     import base64
@@ -37,7 +38,7 @@ def debug_secret():
     except Exception as e:
         return {"error": str(e)}
 
-# Add this to chat_api.py temporarily
+# debugging
 @chat_bp.route('/debug-token', methods=['POST'])
 def debug_token():
     import jwt
@@ -63,7 +64,7 @@ def debug_token():
         return {"error": str(e)}
 
 @chat_bp.route('/chat', methods=['POST'])
-@require_auth  # Now using the corrected decorator
+@require_auth  # using the corrected decorator
 def chat():
     """Interactive chat with AI assistant with user-specific session support."""
     log_api_request('/chat', 'POST', request.remote_addr)
@@ -96,7 +97,7 @@ def chat():
         if param_error:
             return create_error_response(param_error, 400)
         
-        # Create session if not provided - NOW LINKED TO USER
+        # Create session if not provided - LINKED TO USER
         if not session_id and current_app.rag_system.db_manager and current_app.rag_system.db_manager.connection:
             session_id = current_app.rag_system.db_manager.create_chat_session(
                 user_id=user_id,
@@ -370,8 +371,7 @@ def export_user_chat_session(session_id):
         logger.error(f"Error exporting chat session for user {user_id}: {str(e)}")
         return create_error_response(f"Failed to export chat session: {str(e)}")
 
-# Add this debug endpoint to your Flask app
-
+# debug endpoint to flask app
 @chat_bp.route('/api/debug-jwt', methods=['POST'])
 
 def debug_jwt():

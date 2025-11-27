@@ -1,6 +1,5 @@
 """
-Combined main application entry point - FIXED VERSION.
-Runs both Maternal Risk Prediction API and Enhanced RAG API Server together.
+Combined main application entry point - MySQL VERSION with Auto-Setup.
 """
 import os
 import sys
@@ -8,7 +7,7 @@ import logging
 from flask import Flask, jsonify
 from flask_cors import CORS
 
-# CRITICAL FIX: Add project root to Python path at the very beginning
+# Add project root to Python path at the very beginning
 project_root = os.path.dirname(os.path.abspath(__file__))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
@@ -22,8 +21,128 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def auto_setup_mysql():
+    """Automatically setup MySQL database and tables"""
+    try:
+        import pymysql
+        
+        # Get MySQL configuration from environment
+        mysql_user = os.getenv('MYSQL_USER', 'root')
+        mysql_password = os.getenv('MYSQL_PASSWORD', '20000624')
+        mysql_host = os.getenv('MYSQL_HOST', 'localhost')
+        mysql_port = int(os.getenv('MYSQL_PORT', 3306))
+        mysql_database = os.getenv('MYSQL_DATABASE', 'mathruai_database')
+        
+        logger.info("=" * 70)
+        logger.info("Automatic MySQL Database Setup")
+        logger.info("=" * 70)
+        logger.info(f"Host: {mysql_host}:{mysql_port}")
+        logger.info(f"Database: {mysql_database}")
+        logger.info(f"User: {mysql_user}")
+        
+        # Step 1: Connect to MySQL server and create database
+        logger.info("\nConnecting to MySQL server...")
+        connection = pymysql.connect(
+            host=mysql_host,
+            port=mysql_port,
+            user=mysql_user,
+            password=mysql_password
+        )
+        
+        cursor = connection.cursor()
+        
+        # Get MySQL version
+        cursor.execute("SELECT VERSION()")
+        version = cursor.fetchone()
+        logger.info(f"✓ Connected to MySQL {version[0]}")
+        
+        # Create database if it doesn't exist
+        logger.info(f"Creating database '{mysql_database}' if not exists...")
+        cursor.execute(f"""
+            CREATE DATABASE IF NOT EXISTS `{mysql_database}` 
+            CHARACTER SET utf8mb4 
+            COLLATE utf8mb4_unicode_ci
+        """)
+        logger.info(f"✓ Database '{mysql_database}' ready")
+        
+        cursor.close()
+        connection.close()
+        
+        # Step 2: Connect to the specific database
+        logger.info(f"Connecting to database '{mysql_database}'...")
+        connection = pymysql.connect(
+            host=mysql_host,
+            port=mysql_port,
+            user=mysql_user,
+            password=mysql_password,
+            database=mysql_database
+        )
+        
+        cursor = connection.cursor()
+        
+        # Create user_predictions table if not exists
+        logger.info("Creating table 'user_predictions' if not exists...")
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_predictions (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id VARCHAR(100) NOT NULL,
+                age FLOAT NOT NULL,
+                systolic_bp FLOAT NOT NULL,
+                diastolic_bp FLOAT NOT NULL,
+                blood_sugar FLOAT NOT NULL,
+                body_temp FLOAT NOT NULL,
+                bmi FLOAT NOT NULL,
+                heart_rate FLOAT NOT NULL,
+                previous_complications INT DEFAULT 0,
+                preexisting_diabetes INT DEFAULT 0,
+                gestational_diabetes INT DEFAULT 0,
+                mental_health INT DEFAULT 0,
+                risk_level VARCHAR(50),
+                risk_confidence FLOAT,
+                health_advice TEXT,
+                advice_confidence FLOAT,
+                risk_probabilities TEXT,
+                patient_profile TEXT,
+                alternative_advice TEXT,
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_user_id (user_id),
+                INDEX idx_user_created (user_id, created_at)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        """)
+        logger.info("✓ Table 'user_predictions' ready")
+        
+        # Check existing records
+        cursor.execute("SELECT COUNT(*) as count FROM user_predictions")
+        result = cursor.fetchone()
+        logger.info(f"✓ Current records in database: {result[0]}")
+        
+        cursor.close()
+        connection.close()
+        
+        logger.info("=" * 70)
+        logger.info("✓ MySQL Database Setup Completed Successfully!")
+        logger.info("=" * 70)
+        
+        return True
+        
+    except pymysql.Error as e:
+        logger.error(f"MySQL Error: {e}")
+        logger.error("Please check:")
+        logger.error("  1. MySQL server is running")
+        logger.error("  2. Credentials in .env file are correct")
+        logger.error("  3. User has sufficient privileges")
+        return False
+        
+    except Exception as e:
+        logger.error(f"Setup error: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 def load_rag_system(app):
-    """Load RAG system with proper error handling - FIXED VERSION"""
+    """Load RAG system with proper error handling"""
     try:
         logger.info("Loading RAG system...")
         
@@ -35,9 +154,8 @@ def load_rag_system(app):
 
         
         # Initialize authentication for RAG system
-        # Add to create_combined_app() function
-        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-secure-jwt-secret-key')
-        logger.info(f"JWT Secret preview: {app.config['JWT_SECRET_KEY'][:]}...")
+        app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'U2VjdXJlSldUS2V5MTIzITIzITIzIUxvbmdFbm91hfshfjshfZ2gadsd')
+        logger.info(f"JWT Secret configured")
         auth_utils = AuthUtils(app.config['JWT_SECRET_KEY'])
         app.auth_utils = auth_utils
         
@@ -50,9 +168,8 @@ def load_rag_system(app):
             logger.error(f"Failed to initialize RAG database manager: {e}")
             app.db_manager = None
         
-        # Initialize proper RAG system (replace MockRAGSystem with your actual implementation)
+        # Initialize proper RAG system
         try:
-            # Import your actual RAG system
             from chatbot.core.rag_system import VectorRAGSystem
             
             rag_system = VectorRAGSystem(
@@ -65,7 +182,6 @@ def load_rag_system(app):
             logger.info("✓ RAG system initialized")
         except ImportError:
             logger.warning("VectorRAGSystem not found, using mock system")
-            # Fallback to mock system if actual RAG system is not available
             class MockRAGSystem:
                 def __init__(self, db_manager):
                     self.db_manager = db_manager
@@ -90,12 +206,12 @@ def load_rag_system(app):
             logger.error(f"Failed to initialize RAG system: {e}")
             app.rag_system = None
         
-        # Register RAG chat blueprint with /rag prefix - THIS IS THE KEY FIX
+        # Register RAG chat blueprint
         app.register_blueprint(chat_bp, url_prefix='/api')
-        logger.info("✓ RAG chat blueprint registered with /rag prefix")
+        logger.info("✓ RAG chat blueprint registered")
 
         app.register_blueprint(upload_bp, url_prefix='/api')
-        logger.info("✓ RAG upload blueprint registered with /rag prefix")
+        logger.info("✓ RAG upload blueprint registered")
         
         # Add additional RAG endpoints
         from flask import Blueprint
@@ -106,6 +222,7 @@ def load_rag_system(app):
             return jsonify({
                 "service": "Enhanced RAG API",
                 "version": "2.0",
+                "database": "MySQL",
                 "endpoints": [
                     "GET  /rag/ - This documentation",
                     "GET  /rag/health - RAG system health check",
@@ -124,6 +241,7 @@ def load_rag_system(app):
             health_info = {
                 "status": "healthy",
                 "system": "rag",
+                "database_type": "MySQL",
                 "database_connected": False,
                 "auth_configured": hasattr(app, 'auth_utils'),
                 "rag_system_loaded": hasattr(app, 'rag_system') and app.rag_system is not None
@@ -153,7 +271,6 @@ def load_rag_system(app):
             except Exception as e:
                 return jsonify({"error": str(e)}), 500
         
-        # Register the extra endpoints
         app.register_blueprint(rag_extra_bp, url_prefix='/api')
         
         logger.info("✓ RAG system loaded successfully")
@@ -161,7 +278,6 @@ def load_rag_system(app):
         
     except ImportError as e:
         logger.warning(f"RAG system not available - missing import: {e}")
-        logger.warning("Make sure chatbot.api.chat_api module exists and contains chat_bp")
         return False
     except Exception as e:
         logger.error(f"Error loading RAG system: {e}")
@@ -170,74 +286,31 @@ def load_rag_system(app):
         return False
 
 
-def test_maternal_imports():
-    """Test maternal system imports before using them"""
-    try:
-        # Test each import individually
-        from risk_predition_model.config import config
-        logger.info("✓ Config import successful")
-        
-        from risk_predition_model.utils.data_preprocessing import DataPreprocessor
-        logger.info("✓ DataPreprocessor import successful")
-        
-        from risk_predition_model.model.predict import RiskAdvicePredictor
-        logger.info("✓ RiskAdvicePredictor import successful")
-        
-        from risk_predition_model.api.health import health_bp
-        from risk_predition_model.api.prediction import prediction_bp
-        from risk_predition_model.api.model_info import model_info_bp
-        logger.info("✓ Blueprint imports successful")
-        
-        from risk_predition_model.app import get_predictor
-        logger.info("✓ App import successful")
-        
-        return True
-        
-    except ImportError as e:
-        logger.error(f"Import test failed: {e}")
-        return False
-    except Exception as e:
-        logger.error(f"Unexpected error in import test: {e}")
-        return False
-
-
 def load_maternal_system(app):
-    """Load maternal system with proper error handling"""
+    """Load maternal system with MySQL support"""
     try:
         logger.info("Loading maternal risk prediction system...")
         
-        # Test imports first
-        if not test_maternal_imports():
-            logger.warning("Maternal system imports failed - skipping maternal system")
-            return False
-        
-        # Import after confirming they work
         from risk_predition_model.api.health import health_bp
         from risk_predition_model.api.prediction import prediction_bp
         from risk_predition_model.api.model_info import model_info_bp
-        from risk_predition_model.app import get_predictor
+        from risk_predition_model.app import create_app, get_predictor
+        
+        # Create the maternal app context to initialize database and load model
+        try:
+            maternal_app = create_app()
+            logger.info("✓ Maternal app created with MySQL database initialized")
+        except Exception as e:
+            logger.error(f"Failed to create maternal app: {e}")
+            return False
         
         # Check if predictor loads
         predictor = get_predictor()
         if predictor is None:
-            logger.warning("Predictor is None - model may not be loaded properly")
-            
-            # Try to create the app and load the model
-            try:
-                from risk_predition_model.app import create_app
-                maternal_app = create_app()
-                # Get predictor from the created app
-                from risk_predition_model.app import get_predictor
-                predictor = get_predictor()
-                
-                if predictor is None:
-                    logger.error("Still couldn't load predictor after creating app")
-                    return False
-                else:
-                    logger.info("✓ Predictor loaded successfully after app creation")
-            except Exception as e:
-                logger.error(f"Failed to create maternal app: {e}")
-                return False
+            logger.error("Predictor could not be loaded")
+            return False
+        
+        logger.info("✓ Predictor loaded successfully")
         
         # Register maternal blueprints with prefix
         app.register_blueprint(health_bp, url_prefix='/maternal')
@@ -262,29 +335,21 @@ def load_pregnancy_rag_system(app):
     try:
         logger.info("Loading Pregnancy RAG system...")
         
-        
-        # Import the pregnancy RAG system directly
         from dailyrecommendationAI.api_routes import api as pregnancy_api_blueprint, rag_system
         
-        # Register the pregnancy API blueprint with /pregnancy prefix
-        # Use a unique name to avoid conflicts
         app.register_blueprint(
             pregnancy_api_blueprint, 
             url_prefix='/pregnancy', 
             name='pregnancy_api_routes'
         )
-        logger.info("✓ Registered Pregnancy API blueprint with prefix /pregnancy")
+        logger.info("✓ Registered Pregnancy API blueprint")
         
-        # Attach the RAG system instance to the app for health checks
         app.pregnancy_rag_system = rag_system
-        logger.info("✓ Pregnancy RAG system instance attached to app")
-        
         logger.info("✓ Pregnancy RAG system loaded successfully")
         return True
         
     except ImportError as e:
         logger.warning(f"Pregnancy RAG system not available: {e}")
-        logger.warning("Make sure api_routes.py exists and contains the 'api' blueprint and 'rag_system'")
         return False
     except Exception as e:
         logger.error(f"Error loading Pregnancy RAG system: {e}")
@@ -294,9 +359,22 @@ def load_pregnancy_rag_system(app):
 
 
 def create_combined_app():
-    """Create combined Flask app with both maternal and RAG systems."""
-    logger.info(f"Creating combined app from directory: {os.getcwd()}")
-    logger.info(f"Python path includes: {project_root}")
+    """Create combined Flask app with automatic MySQL setup."""
+    logger.info(f"Creating combined app with MySQL support")
+    logger.info(f"Working directory: {os.getcwd()}")
+    
+    # AUTOMATICALLY SETUP MySQL database and tables
+    logger.info("\n" + "=" * 70)
+    logger.info("STEP 1: Setting up MySQL Database")
+    logger.info("=" * 70)
+    
+    if not auto_setup_mysql():
+        logger.warning("MySQL setup had issues - proceeding anyway")
+        logger.warning("The application may not work correctly without proper database setup")
+    
+    logger.info("\n" + "=" * 70)
+    logger.info("STEP 2: Creating Flask Application")
+    logger.info("=" * 70)
     
     # Create main Flask app
     app = Flask(__name__)
@@ -309,25 +387,61 @@ def create_combined_app():
     
     # Set up configuration
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
-    app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+    app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
     
-    # ADD THESE MISSING CONFIGURATION SETTINGS FOR RAG SYSTEM
+    # RAG system configuration
     app.config['ALLOWED_EXTENSIONS'] = {'pdf'}
     app.config['UPLOAD_FOLDER'] = 'uploads'
-    app.config['MAX_FILE_SIZE'] = 16 * 1024 * 1024  # 16MB
+    app.config['MAX_FILE_SIZE'] = 16 * 1024 * 1024
     
-    # Create upload directory if it doesn't exist
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-    
+
+    # Initialize maternal database with MySQL using SQLAlchemy
+    try:
+        logger.info("Initializing SQLAlchemy with MySQL...")
+        from risk_predition_model.model.database import db
+        
+        # Get MySQL configuration
+        mysql_user = os.getenv('MYSQL_USER', 'root')
+        mysql_password = os.getenv('MYSQL_PASSWORD', 'your_password')
+        mysql_host = os.getenv('MYSQL_HOST', 'localhost')
+        mysql_port = os.getenv('MYSQL_PORT', '3306')
+        mysql_database = os.getenv('MYSQL_DATABASE', 'maternal_health')
+        
+        # Configure SQLAlchemy with MySQL
+        app.config['SQLALCHEMY_DATABASE_URI'] = f'mysql+pymysql://{mysql_user}:{mysql_password}@{mysql_host}:{mysql_port}/{mysql_database}?charset=utf8mb4'
+        app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+            'pool_size': 10,
+            'pool_recycle': 3600,
+            'pool_pre_ping': True,
+            'max_overflow': 20
+        }
+        
+        logger.info(f"MySQL URI: mysql+pymysql://{mysql_user}:****@{mysql_host}:{mysql_port}/{mysql_database}")
+
+        db.init_app(app)
+        
+        # Create tables in app context (this will use existing tables created by auto_setup_mysql)
+        with app.app_context():
+            db.create_all()
+            logger.info("✓ SQLAlchemy synchronized with MySQL tables")
+    except Exception as e:
+        logger.warning(f"Could not initialize SQLAlchemy: {e}")
+
     # Load systems
+    logger.info("\n" + "=" * 70)
+    logger.info("STEP 3: Loading Application Systems")
+    logger.info("=" * 70)
+    
     maternal_available = load_maternal_system(app)
     rag_available = load_rag_system(app)
     pregnancy_available = load_pregnancy_rag_system(app)
     
     if not maternal_available and not rag_available and not pregnancy_available:
-        raise RuntimeError("None of the systems (maternal, RAG, or pregnancy) could be loaded")
+        raise RuntimeError("None of the systems could be loaded")
     
-    # Root endpoint for API documentation
+    # Root endpoint
     @app.route('/')
     def api_documentation():
         available_systems = {}
@@ -337,44 +451,32 @@ def create_combined_app():
             available_systems["maternal"] = "Available at /maternal/*"
             endpoints["maternal_endpoints"] = [
                 "POST /maternal/predict - Full risk and advice prediction",
-                "POST /maternal/predict-risk-only - Risk prediction only", 
+                "GET /maternal/get-latest/<user_id> - Get latest prediction",
+                "DELETE /maternal/delete/<user_id> - Delete prediction",
                 "GET /maternal/model-info - Model information",
-                "POST /maternal/batch-predict - Batch predictions",
                 "GET /maternal/health - Health check"
             ]
             
         if rag_available:
             available_systems["rag"] = "Available at /rag/*"
             endpoints["rag_endpoints"] = [
-                "GET /rag/ - RAG API documentation",
-                "GET /rag/health - System health check",
-                "GET /rag/stats - System statistics", 
-                "POST /rag/chat - Interactive chat with authentication",
-                "GET /rag/chats - List user chat sessions",
-                "POST /rag/chats - Create chat session",
-                "GET /rag/chats/<id> - Get chat history",
-                "DELETE /rag/chats/<id> - Delete chat session",
-                "GET /rag/user/stats - User statistics"
+                "POST /rag/chat - Interactive chat",
+                "GET /rag/health - Health check",
+                "GET /rag/stats - Statistics"
             ]
             
         if pregnancy_available:
             available_systems["pregnancy"] = "Available at /pregnancy/*"
             endpoints["pregnancy_endpoints"] = [
                 "GET /pregnancy/health - Health check",
-                "POST /pregnancy/register - Register new user",
-                "GET /pregnancy/user/<user_id> - Get user info",
-                "PUT /pregnancy/user/<user_id> - Update user",
-                "GET /pregnancy/recommendation/<user_id> - Get recommendation",
-                "POST /pregnancy/search - Search knowledge base",
-                "GET /pregnancy/recommendations/history/<user_id> - Get history",
-                "POST /pregnancy/upload-pdf - Upload PDF",
-                "GET /pregnancy/stats - System statistics",
-                "GET /pregnancy/debug/recommendation/<user_id> - Debug endpoint"
+                "POST /pregnancy/register - Register user",
+                "POST /pregnancy/search - Search knowledge"
             ]
             
         return jsonify({
             "message": "Combined Maternal Risk & RAG API Server",
-            "version": "2.1",
+            "version": "2.1 - MySQL Edition (Auto-Setup)",
+            "database": "MySQL",
             "systems": available_systems,
             **endpoints
         })
@@ -384,8 +486,8 @@ def create_combined_app():
     def combined_health():
         health_status = {
             "status": "healthy",
-            "timestamp": logging.Formatter().formatTime(logging.LogRecord(
-                "", 0, "", 0, "", (), None)),
+            "database_type": "MySQL",
+            "auto_setup": "enabled",
             "systems": {}
         }
         
@@ -396,78 +498,31 @@ def create_combined_app():
                 health_status["systems"]["maternal"] = {
                     "status": "healthy",
                     "model_loaded": predictor is not None,
-                    "api_version": "2.0"
+                    "database": "MySQL"
                 }
             except Exception as e:
                 health_status["systems"]["maternal"] = {
                     "status": "error",
                     "error": str(e)
                 }
-        else:
-            health_status["systems"]["maternal"] = {
-                "status": "unavailable",
-                "model_loaded": False
-            }
         
-        if rag_available and hasattr(app, 'rag_system') and app.rag_system:
-            try:
-                stats = app.rag_system.get_system_stats()
-                health_status["systems"]["rag"] = {
-                    "status": "healthy",
-                    "knowledge_base_chunks": stats.get('total_chunks', 0),
-                    "database_connected": stats.get('database_connected', False),
-                    "embedding_model": stats.get('embedding_model', 'unknown'),
-                    "auth_configured": hasattr(app, 'auth_utils')
-                }
-            except Exception as e:
-                health_status["systems"]["rag"] = {
-                    "status": "error",
-                    "error": str(e)
-                }
-        else:
-            health_status["systems"]["rag"] = {
-                "status": "unavailable"
-            }
+        if rag_available:
+            health_status["systems"]["rag"] = {"status": "healthy"}
             
         if pregnancy_available:
-            try:
-                if hasattr(app, 'pregnancy_rag_system') and app.pregnancy_rag_system:
-                    # Get basic info from pregnancy RAG system
-                    health_status["systems"]["pregnancy"] = {
-                        "status": "healthy",
-                        "system": "pregnancy_rag_loaded",
-                        "vector_db_size": len(app.pregnancy_rag_system.vector_database.document_chunks) if hasattr(app.pregnancy_rag_system, 'vector_database') else 0,
-                        "database_connected": app.pregnancy_rag_system.database_manager.is_connected() if hasattr(app.pregnancy_rag_system, 'database_manager') else False,
-                        "groq_available": getattr(app.pregnancy_rag_system.ai_service, 'groq_available', False) if hasattr(app.pregnancy_rag_system, 'ai_service') else False
-                    }
-                else:
-                    health_status["systems"]["pregnancy"] = {
-                        "status": "healthy",
-                        "system": "pregnancy_blueprint_loaded"
-                    }
-            except Exception as e:
-                health_status["systems"]["pregnancy"] = {
-                    "status": "error",
-                    "error": str(e)
-                }
-        else:
-            health_status["systems"]["pregnancy"] = {
-                "status": "unavailable"
-            }
+            health_status["systems"]["pregnancy"] = {"status": "healthy"}
         
         return jsonify(health_status)
     
-    # Debug endpoint to list all routes
+    # Debug endpoint
     @app.route('/debug/routes')
     def list_routes():
-        """List all registered routes for debugging"""
         routes = []
         for rule in app.url_map.iter_rules():
             routes.append({
                 'endpoint': rule.endpoint,
                 'methods': list(rule.methods),
-                'rule': str(rule),
-                'subdomain': rule.subdomain
+                'rule': str(rule)
             })
         
         return jsonify({
@@ -475,106 +530,37 @@ def create_combined_app():
             'routes': sorted(routes, key=lambda x: x['rule'])
         })
     
-    # Determine app type
-    systems = []
-    if maternal_available:
-        systems.append('maternal')
-    if rag_available:
-        systems.append('rag')
-    if pregnancy_available:
-        systems.append('pregnancy')
-    
-    if len(systems) > 1:
-        app_type = 'combined'
-    elif systems:
-        app_type = systems[0]
-    else:
-        app_type = 'unknown'
-    
-    return app, app_type
-
-
-def print_startup_info(app_type, app):
-    """Print startup information based on app type."""
-    logger.info("=" * 70)
-    
-    if app_type == 'combined':
-        logger.info("Combined Maternal Risk & RAG API Server v2.1")
-        logger.info("=" * 70)
-        logger.info("Multiple systems are active and running together!")
-        
-        # Print RAG stats if available
-        if hasattr(app, 'rag_system') and app.rag_system:
-            try:
-                stats = app.rag_system.get_system_stats()
-                logger.info(f"Knowledge Base: {stats['total_chunks']} chunks")
-                logger.info(f"Database: {'Connected' if stats['database_connected'] else 'Disconnected'}")
-                logger.info(f"Auth: {'Configured' if hasattr(app, 'auth_utils') else 'Not Configured'}")
-            except Exception as e:
-                logger.warning(f"Could not retrieve RAG system stats: {e}")
-        
-        # Print pregnancy system stats if available
-        if hasattr(app, 'pregnancy_rag_system') and app.pregnancy_rag_system:
-            try:
-                if hasattr(app.pregnancy_rag_system, 'vector_database'):
-                    vector_size = len(app.pregnancy_rag_system.vector_database.document_chunks)
-                    logger.info(f"Pregnancy Knowledge Base: {vector_size} chunks")
-                if hasattr(app.pregnancy_rag_system, 'database_manager'):
-                    db_status = "Connected" if app.pregnancy_rag_system.database_manager.is_connected() else "Disconnected"
-                    logger.info(f"Pregnancy Database: {db_status}")
-            except Exception as e:
-                logger.warning(f"Could not retrieve pregnancy system stats: {e}")
-        
-        logger.info("Combined System Endpoints:")
-        logger.info("  GET  /                     - API documentation")
-        logger.info("  GET  /health               - Combined health check")
-        logger.info("  GET  /debug/routes         - List all routes (debug)")
-        logger.info("")
-        logger.info("Enhanced RAG API (prefixed with /rag):")
-        logger.info("  GET  /rag/                 - RAG API documentation")
-        logger.info("  GET  /rag/health           - System health check")
-        logger.info("  GET  /rag/stats            - System statistics")
-        logger.info("  POST /rag/chat             - Interactive chat (requires auth)")
-        logger.info("  GET  /rag/chats            - List user chat sessions (requires auth)")
-        logger.info("  POST /rag/chats            - Create chat session (requires auth)")
-        logger.info("  GET  /rag/chats/<id>       - Get chat history (requires auth)")
-        logger.info("  DELETE /rag/chats/<id>     - Delete chat session (requires auth)")
-        logger.info("  GET  /rag/user/stats       - User statistics (requires auth)")
-        logger.info("")
-        logger.info("NOTE: RAG endpoints require JWT authentication in Authorization header")
-        
-    logger.info("=" * 70)
+    return app, 'combined'
 
 
 def main():
-    """Main application entry point."""
-    # Get configuration from environment
+    """Main application entry point with automatic MySQL setup."""
     host = os.environ.get('HOST', '0.0.0.0')
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('DEBUG', 'False').lower() == 'true'
     
-    # Support legacy FLASK_ENV for debug mode
-    if os.environ.get('FLASK_ENV') == 'development':
-        debug = True
-    
     try:
-        # Create combined application
+        logger.info("=" * 70)
+        logger.info("Combined Maternal Risk & RAG API Server")
+        logger.info("MySQL Edition with Automatic Database Setup")
+        logger.info("=" * 70)
+        
         app, app_type = create_combined_app()
         
-        # Print startup information
-        print_startup_info(app_type, app)
-        
+        logger.info("\n" + "=" * 70)
+        logger.info("STEP 4: Starting Flask Server")
         logger.info("=" * 70)
         logger.info(f"Host: {host}")
         logger.info(f"Port: {port}")
-        logger.info(f"Debug Mode: {debug}")
-        logger.info(f"Application Type: {app_type}")
+        logger.info(f"Debug: {debug}")
+        logger.info(f"Database: MySQL (auto-configured)")
         logger.info("=" * 70)
-        logger.info("TIP: Visit /debug/routes to see all registered routes")
-        logger.info("TIP: Visit /rag/health to check RAG system status")
-        logger.info("=" * 70)
+        logger.info("\n🚀 Server is ready!")
+        logger.info(f"   Main API: http://{host}:{port}/")
+        logger.info(f"   Health: http://{host}:{port}/health")
+        logger.info(f"   Maternal API: http://{host}:{port}/maternal/")
+        logger.info("=" * 70 + "\n")
         
-        # Start the Flask development server
         app.run(
             debug=debug,
             host=host,
@@ -584,10 +570,13 @@ def main():
         )
         
     except KeyboardInterrupt:
+        logger.info("\n" + "=" * 70)
         logger.info("Server shutdown requested by user")
+        logger.info("=" * 70)
     except Exception as e:
+        logger.error("\n" + "=" * 70)
         logger.error(f"Failed to start application: {e}")
-        logger.error(f"Error details: {type(e).__name__}: {str(e)}")
+        logger.error("=" * 70)
         import traceback
         traceback.print_exc()
     finally:

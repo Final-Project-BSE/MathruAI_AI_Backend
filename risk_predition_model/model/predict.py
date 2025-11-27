@@ -8,7 +8,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 class RiskAdvicePredictor:
-    def __init__(self, model_path='risk_predition_model/model/maternal_risk_advice_model.pkl'):
+    def __init__(self, model_path='model/maternal_risk_advice_model.pkl'):
         """Initialize the predictor with the trained model"""
         self.model_data = joblib.load(model_path)
         self.model = self.model_data['model']
@@ -165,7 +165,7 @@ class RiskAdvicePredictor:
 # Compatibility class for existing code
 class RiskPredictor(RiskAdvicePredictor):
     """Backward compatibility wrapper"""
-    def __init__(self, model_path='risk_predition_model/model/maternal_risk_advice_model.pkl'):
+    def __init__(self, model_path='model/maternal_risk_advice_model.pkl'):
         super().__init__(model_path)
     
     def predict_risk(self, input_data: Dict[str, Any]) -> Dict[str, Any]:

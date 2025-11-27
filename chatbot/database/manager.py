@@ -1,5 +1,5 @@
 """
-Updated Database manager with user authentication support.
+this is example manager.py
 """
 import mysql.connector
 from mysql.connector import Error

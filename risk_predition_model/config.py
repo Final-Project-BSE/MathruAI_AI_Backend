@@ -1,12 +1,23 @@
+"""
+Simplified configuration for maternal risk prediction system.
+Direct MySQL connection - No SQLAlchemy.
+"""
 import os
+
 
 class Config:
     """Base configuration"""
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'jajdajdajdasndjnadmaki2389djun223n22uhuhue2ueuasndjd'
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'U2VjdXJlSldUS2V5MTIzITIzITIzIUxvbmdFbm91hfshfjshfZ2gadsd'
     
-    # Model paths - try new multi-output model first, fallback to old model
-    MODEL_PATH = os.environ.get('MODEL_PATH') or 'risk_predition_model/model/maternal_risk_advice_model.pkl'
-    FALLBACK_MODEL_PATH = 'risk_predition_model/model/maternal_risk_advice_model.pkl'
+    # MySQL Configuration
+    MYSQL_USER = os.environ.get('MYSQL_USER', 'root')
+    MYSQL_PASSWORD = os.environ.get('MYSQL_PASSWORD', '20000624')
+    MYSQL_HOST = os.environ.get('MYSQL_HOST', 'localhost')
+    MYSQL_PORT = int(os.environ.get('MYSQL_PORT', 3306))
+    MYSQL_DATABASE = os.environ.get('MYSQL_DATABASE', 'mathruai_database')
+    
+    # Model paths
+    MODEL_PATH = os.environ.get('MODEL_PATH') or 'model/maternal_risk_advice_model.pkl'
     
     # Data paths
     DATA_DIR = os.environ.get('DATA_DIR') or 'data'
@@ -48,37 +59,31 @@ class Config:
     RISK_LEVEL_COLUMN = 'RiskLevel'
     HEALTH_ADVICE_COLUMN = 'HealthAdvice'
 
+
 class DevelopmentConfig(Config):
     """Development configuration"""
     DEBUG = True
     FLASK_ENV = 'development'
-    
-    # More verbose logging in development
     LOG_LEVEL = 'DEBUG'
-    
-    # Allow larger batch sizes in development for testing
     MAX_BATCH_SIZE = 200
+
 
 class ProductionConfig(Config):
     """Production configuration"""
     DEBUG = False
     FLASK_ENV = 'production'
-    
-    # More restrictive settings in production
     MAX_BATCH_SIZE = 50
     REQUEST_TIMEOUT = 15
-    
-    # Use environment variables for sensitive information
-    
+
 
 class TestingConfig(Config):
     """Testing configuration"""
     TESTING = True
     DEBUG = True
-    
-    # Use in-memory or test-specific paths
+    MYSQL_DATABASE = os.environ.get('MYSQL_TEST_DATABASE', 'maternal_health_test')
     MODEL_PATH = 'test/test_model.pkl'
     DATA_DIR = 'test/data'
+
 
 # Configuration dictionary
 config = {
@@ -88,7 +93,7 @@ config = {
     'default': DevelopmentConfig
 }
 
-# Helper function to get current config
+
 def get_config():
     """Get the current configuration based on environment"""
     env = os.environ.get('FLASK_ENV', 'default')

@@ -1,218 +1,752 @@
+"""
+Secured Pregnancy Risk Prediction API Routes with JWT Authentication
+"""
 from flask import Blueprint, request, jsonify
 import logging
-from risk_predition_model.app import get_predictor
+import traceback
+from auth.JWTauth import token_required
 
-prediction_bp = Blueprint('prediction', __name__)
 logger = logging.getLogger(__name__)
+prediction_bp = Blueprint('prediction', __name__)
 
-@prediction_bp.route('/predict', methods=['POST'])
-def predict_risk_and_advice():
-    """Predict both maternal risk level and health advice"""
+
+def validate_input_data(data):
+    """Validate input data"""
+    required_fields = ['Age', 'SystolicBP', 'DiastolicBP', 'BS', 'BodyTemp', 'BMI', 'HeartRate']
+    missing_fields = []
+    invalid_fields = []
+    
+    for field in required_fields:
+        if field not in data:
+            missing_fields.append(field)
+        elif data[field] == '' or data[field] is None:
+            invalid_fields.append(f"{field} is empty")
+        else:
+            try:
+                float(data[field])
+            except (ValueError, TypeError):
+                invalid_fields.append(f"{field} is not a valid number")
+    
+    if missing_fields:
+        return False, f"Missing required fields: {', '.join(missing_fields)}"
+    
+    if invalid_fields:
+        return False, f"Invalid field values: {'; '.join(invalid_fields)}"
+    
+    return True, None
+
+
+@prediction_bp.route('/store', methods=['POST'])
+@token_required
+def store_prediction():
+    """
+    Store new prediction - PROTECTED ROUTE
+    Automatically uses authenticated user's email from JWT token
+    
+    Request Headers:
+    Authorization: Bearer <jwt_token>
+    
+    Request body:
+    {
+        "Age": 25,
+        "SystolicBP": 120,
+        "DiastolicBP": 80,
+        "BS": 100,
+        "BodyTemp": 98.6,
+        "BMI": 22.5,
+        "HeartRate": 75,
+        "PreviousComplications": 0,
+        "PreexistingDiabetes": 0,
+        "GestationalDiabetes": 0,
+        "MentalHealth": 0
+    }
+    """
     try:
-        predictor = get_predictor()
+        data = request.get_json(force=True)
         
-        if predictor is None:
+        if not data:
             return jsonify({
-                'error': 'Model not loaded',
-                'status': 'error'
+                "status": "error",
+                "error": "No JSON data provided"
+            }), 400
+        
+        # Get email from JWT token (set by @token_required decorator)
+        email = request.user_email
+        
+        # Validate input
+        is_valid, error_msg = validate_input_data(data)
+        if not is_valid:
+            return jsonify({"status": "error", "error": error_msg}), 400
+        
+        # Prepare input data
+        input_data = {
+            'Age': float(data['Age']),
+            'SystolicBP': float(data['SystolicBP']),
+            'DiastolicBP': float(data['DiastolicBP']),
+            'BS': float(data['BS']),
+            'BodyTemp': float(data['BodyTemp']),
+            'BMI': float(data['BMI']),
+            'HeartRate': float(data['HeartRate']),
+            'PreviousComplications': int(data.get('PreviousComplications', 0)),
+            'PreexistingDiabetes': int(data.get('PreexistingDiabetes', 0)),
+            'GestationalDiabetes': int(data.get('GestationalDiabetes', 0)),
+            'MentalHealth': int(data.get('MentalHealth', 0))
+        }
+        
+        logger.info(f"Processing prediction for authenticated user: {email}")
+        
+        # Get database manager
+        from model.database import get_db_manager
+        db_manager = get_db_manager()
+        
+        # Create or get user
+        user_id = db_manager.create_user(email)
+        if not user_id:
+            return jsonify({
+                "status": "error",
+                "error": "Failed to create user"
             }), 500
         
-        # Get input data
-        input_data = request.get_json()
-        
-        if not input_data:
+        # Get predictor
+        try:
+            from model.predict import RiskAdvicePredictor
+            predictor = RiskAdvicePredictor()
+        except:
             return jsonify({
-                'error': 'No input data provided',
-                'status': 'error',
-                'expected_format': {
-                    'Age': 'number',
-                    'SystolicBP': 'number',
-                    'DiastolicBP': 'number', 
-                    'BS': 'number (blood sugar)',
-                    'BodyTemp': 'number',
-                    'BMI': 'number',
-                    'PreviousComplications': '0 or 1',
-                    'PreexistingDiabetes': '0 or 1',
-                    'GestationalDiabetes': '0 or 1',
-                    'MentalHealth': '0 or 1',
-                    'HeartRate': 'number'
-                }
-            }), 400
-        
-        # Validate required fields
-        required_fields = ['Age', 'SystolicBP', 'DiastolicBP', 'BS', 'BodyTemp', 'BMI', 
-                          'HeartRate']
-        missing_fields = [field for field in required_fields if field not in input_data]
-        
-        if missing_fields:
-            return jsonify({
-                'error': f'Missing required fields: {missing_fields}',
-                'status': 'error',
-                'provided_fields': list(input_data.keys())
-            }), 400
+                "status": "error",
+                "error": "Prediction model not available"
+            }), 503
         
         # Make prediction
-        result = predictor.predict_risk_and_advice(input_data)
+        prediction_result = predictor.predict_risk_and_advice(input_data)
         
-        if 'error' in result:
+        if 'error' in prediction_result:
             return jsonify({
-                'error': result['error'],
-                'status': 'error'
-            }), 400
-        
-        return jsonify({
-            'status': 'success',
-            'data': {
-                'risk_assessment': {
-                    'risk_level': result['risk_level'],
-                    'confidence': result['risk_confidence'],
-                    'all_risk_probabilities': result['risk_probabilities']
-                },
-                'health_guidance': {
-                    'primary_advice': result['health_advice'],
-                    'advice_confidence': result['advice_confidence'],
-                    'alternative_recommendations': result.get('alternative_advice', [])
-                },
-                'patient_profile': result.get('input_summary', {}),
-                'technical_info': {
-                    'features_analyzed': len(result['features_used']),
-                    'model_version': '2.0'
-                }
-            }
-        })
-        
-    except Exception as e:
-        logger.error(f"Prediction error: {str(e)}")
-        return jsonify({
-            'error': 'Internal server error during prediction',
-            'status': 'error',
-            'details': str(e)
-        }), 500
-
-@prediction_bp.route('/predict-risk-only', methods=['POST'])
-def predict_risk_only():
-    """Predict only risk level (backward compatibility)"""
-    try:
-        predictor = get_predictor()
-        
-        if predictor is None:
-            return jsonify({
-                'error': 'Model not loaded',
-                'status': 'error'
+                "status": "error",
+                "error": prediction_result['error']
             }), 500
         
-        # Get input data
-        input_data = request.get_json()
+        # Store in database
+        prediction_id = db_manager.store_prediction(user_id, input_data, prediction_result)
         
-        if not input_data:
+        if not prediction_id:
+            logger.error("Failed to store prediction")
             return jsonify({
-                'error': 'No input data provided',
-                'status': 'error'
-            }), 400
-        
-        # Make prediction using backward compatibility method
-        result = predictor.predict_risk(input_data)
-        
-        if 'error' in result:
-            return jsonify({
-                'error': result['error'],
-                'status': 'error'
-            }), 400
-        
-        return jsonify({
-            'status': 'success',
-            'data': result
-        })
-        
-    except Exception as e:
-        logger.error(f"Risk-only prediction error: {str(e)}")
-        return jsonify({
-            'error': 'Internal server error',
-            'status': 'error'
-        }), 500
-
-@prediction_bp.route('/batch-predict', methods=['POST'])
-def batch_predict():
-    """Predict risk and advice for multiple patients"""
-    try:
-        predictor = get_predictor()
-        
-        if predictor is None:
-            return jsonify({
-                'error': 'Model not loaded',
-                'status': 'error'
+                "status": "error",
+                "error": "Failed to store prediction"
             }), 500
         
-        input_data = request.get_json()
-        
-        if not input_data or 'patients' not in input_data:
-            return jsonify({
-                'error': 'Invalid input format. Expected {"patients": [patient_data]}',
-                'status': 'error'
-            }), 400
-        
-        patients = input_data['patients']
-        results = []
-        
-        for i, patient_data in enumerate(patients):
-            try:
-                result = predictor.predict_risk_and_advice(patient_data)
-                
-                # Format result for batch response
-                formatted_result = {
-                    'patient_id': i,
-                    'risk_level': result.get('risk_level', 'Error'),
-                    'risk_confidence': result.get('risk_confidence', 0.0),
-                    'health_advice': result.get('health_advice', 'No advice available'),
-                    'advice_confidence': result.get('advice_confidence', 0.0),
-                    'patient_summary': result.get('input_summary', {}),
-                    'status': 'success' if 'error' not in result else 'error'
-                }
-                
-                if 'error' in result:
-                    formatted_result['error'] = result['error']
-                    formatted_result['status'] = 'error'
-                
-                results.append(formatted_result)
-                
-            except Exception as e:
-                results.append({
-                    'patient_id': i,
-                    'error': str(e),
-                    'risk_level': 'Error',
-                    'health_advice': 'Error processing patient data',
-                    'risk_confidence': 0.0,
-                    'advice_confidence': 0.0,
-                    'status': 'error'
-                })
-        
-        # Calculate summary statistics
-        successful_predictions = [r for r in results if r['status'] == 'success']
-        error_count = len(results) - len(successful_predictions)
-        
-        # Risk level distribution
-        risk_distribution = {}
-        for result in successful_predictions:
-            risk = result['risk_level']
-            risk_distribution[risk] = risk_distribution.get(risk, 0) + 1
-        
-        return jsonify({
-            'status': 'success',
-            'data': {
-                'predictions': results,
-                'summary': {
-                    'total_patients': len(patients),
-                    'successful_predictions': len(successful_predictions),
-                    'errors': error_count,
-                    'success_rate': len(successful_predictions) / len(patients) if patients else 0,
-                    'risk_distribution': risk_distribution
-                }
+        response_data = {
+            "status": "success",
+            "message": "Prediction stored successfully",
+            "data": {
+                "prediction_id": prediction_id,
+                "user_id": user_id,
+                "email": email,
+                "risk_assessment": {
+                    "risk_level": prediction_result.get('risk_level'),
+                    "confidence": prediction_result.get('risk_confidence'),
+                    "all_risk_probabilities": prediction_result.get('risk_probabilities', {})
+                },
+                "health_guidance": {
+                    "primary_advice": prediction_result.get('health_advice'),
+                    "advice_confidence": prediction_result.get('advice_confidence'),
+                    "alternative_recommendations": prediction_result.get('alternative_advice', [])
+                },
+                "patient_profile": prediction_result.get('input_summary', {}),
+                "vitals": input_data
             }
-        })
+        }
+        
+        logger.info(f"Successfully processed prediction {prediction_id}")
+        return jsonify(response_data), 201
         
     except Exception as e:
-        logger.error(f"Batch prediction error: {str(e)}")
+        logger.error(f"Error in store_prediction: {str(e)}")
+        logger.error(traceback.format_exc())
         return jsonify({
-            'error': 'Internal server error',
-            'status': 'error'
+            "status": "error",
+            "error": f"Internal server error: {str(e)}"
+        }), 500
+
+
+@prediction_bp.route('/update/<int:prediction_id>', methods=['PUT'])
+@token_required
+def update_prediction(prediction_id):
+    """
+    Update existing prediction - PROTECTED ROUTE
+    Only the owner can update their prediction
+    """
+    try:
+        data = request.get_json(force=True)
+        
+        if not data:
+            return jsonify({
+                "status": "error",
+                "error": "No JSON data provided"
+            }), 400
+        
+        # Get email from JWT token
+        email = request.user_email
+        
+        # Validate input
+        is_valid, error_msg = validate_input_data(data)
+        if not is_valid:
+            return jsonify({"status": "error", "error": error_msg}), 400
+        
+        # Prepare input data
+        input_data = {
+            'Age': float(data['Age']),
+            'SystolicBP': float(data['SystolicBP']),
+            'DiastolicBP': float(data['DiastolicBP']),
+            'BS': float(data['BS']),
+            'BodyTemp': float(data['BodyTemp']),
+            'BMI': float(data['BMI']),
+            'HeartRate': float(data['HeartRate']),
+            'PreviousComplications': int(data.get('PreviousComplications', 0)),
+            'PreexistingDiabetes': int(data.get('PreexistingDiabetes', 0)),
+            'GestationalDiabetes': int(data.get('GestationalDiabetes', 0)),
+            'MentalHealth': int(data.get('MentalHealth', 0))
+        }
+        
+        logger.info(f"Updating prediction {prediction_id} for user: {email}")
+        
+        # Get database manager
+        from model.database import get_db_manager
+        db_manager = get_db_manager()
+        
+        # Get user
+        user_id = db_manager.create_user(email)
+        if not user_id:
+            return jsonify({
+                "status": "error",
+                "error": "Failed to get user"
+            }), 500
+        
+        # Check if prediction exists and belongs to user
+        existing = db_manager.get_prediction(prediction_id, user_id)
+        if not existing:
+            return jsonify({
+                "status": "error",
+                "error": f"Prediction {prediction_id} not found or you don't have permission"
+            }), 404
+        
+        # Get predictor
+        try:
+            from model.predict import RiskAdvicePredictor
+            predictor = RiskAdvicePredictor()
+        except:
+            return jsonify({
+                "status": "error",
+                "error": "Prediction model not available"
+            }), 503
+        
+        # Make prediction
+        prediction_result = predictor.predict_risk_and_advice(input_data)
+        
+        if 'error' in prediction_result:
+            return jsonify({
+                "status": "error",
+                "error": prediction_result['error']
+            }), 500
+        
+        # Update in database
+        success = db_manager.update_prediction(user_id, prediction_id, input_data, prediction_result)
+        
+        if not success:
+            return jsonify({
+                "status": "error",
+                "error": "Failed to update prediction"
+            }), 500
+        
+        response_data = {
+            "status": "success",
+            "message": "Prediction updated successfully",
+            "data": {
+                "prediction_id": prediction_id,
+                "user_id": user_id,
+                "email": email,
+                "risk_assessment": {
+                    "risk_level": prediction_result.get('risk_level'),
+                    "confidence": prediction_result.get('risk_confidence'),
+                    "all_risk_probabilities": prediction_result.get('risk_probabilities', {})
+                },
+                "health_guidance": {
+                    "primary_advice": prediction_result.get('health_advice'),
+                    "advice_confidence": prediction_result.get('advice_confidence'),
+                    "alternative_recommendations": prediction_result.get('alternative_advice', [])
+                },
+                "patient_profile": prediction_result.get('input_summary', {}),
+                "vitals": input_data
+            }
+        }
+        
+        logger.info(f"Successfully updated prediction {prediction_id}")
+        return jsonify(response_data), 200
+        
+    except Exception as e:
+        logger.error(f"Error in update_prediction: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({
+            "status": "error",
+            "error": f"Internal server error: {str(e)}"
+        }), 500
+
+
+@prediction_bp.route('/get/<int:prediction_id>', methods=['GET'])
+@token_required
+def get_prediction(prediction_id):
+    """Get a specific prediction - PROTECTED ROUTE"""
+    try:
+        email = request.user_email
+        
+        from model.database import get_db_manager
+        db_manager = get_db_manager()
+        
+        user_id = db_manager.create_user(email)
+        if not user_id:
+            return jsonify({
+                "status": "error",
+                "error": "Failed to get user"
+            }), 500
+        
+        prediction = db_manager.get_prediction(prediction_id, user_id)
+        
+        if not prediction:
+            return jsonify({
+                "status": "error",
+                "error": f"Prediction {prediction_id} not found or you don't have permission"
+            }), 404
+        
+        return jsonify({
+            "status": "success",
+            "data": prediction
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error in get_prediction: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "error": f"Internal server error: {str(e)}"
+        }), 500
+
+
+@prediction_bp.route('/latest', methods=['GET'])
+@token_required
+def get_latest():
+    """Get latest prediction for authenticated user - PROTECTED ROUTE"""
+    try:
+        email = request.user_email
+        
+        from model.database import get_db_manager
+        db_manager = get_db_manager()
+        
+        user_id = db_manager.create_user(email)
+        if not user_id:
+            return jsonify({
+                "status": "error",
+                "error": "Failed to get user"
+            }), 500
+        
+        prediction = db_manager.get_latest_prediction(user_id)
+        
+        if not prediction:
+            return jsonify({
+                "status": "error",
+                "error": "No predictions found"
+            }), 404
+        
+        return jsonify({
+            "status": "success",
+            "data": prediction
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error in get_latest: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "error": f"Internal server error: {str(e)}"
+        }), 500
+
+
+@prediction_bp.route('/history', methods=['GET'])
+@token_required
+def get_history():
+    """Get prediction history for authenticated user - PROTECTED ROUTE"""
+    try:
+        email = request.user_email
+        limit = request.args.get('limit', 10, type=int)
+        
+        from model.database import get_db_manager
+        db_manager = get_db_manager()
+        
+        user_id = db_manager.create_user(email)
+        if not user_id:
+            return jsonify({
+                "status": "error",
+                "error": "Failed to get user"
+            }), 500
+        
+        predictions = db_manager.get_user_predictions(user_id, limit)
+        
+        return jsonify({
+            "status": "success",
+            "count": len(predictions),
+            "data": predictions
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error in get_history: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "error": f"Internal server error: {str(e)}"
+        }), 500
+
+@prediction_bp.route('/delete/<int:prediction_id>', methods=['DELETE'])
+@token_required
+def delete_prediction(prediction_id):
+    """Delete a prediction - PROTECTED ROUTE"""
+    try:
+        email = request.user_email
+        
+        from model.database import get_db_manager
+        db_manager = get_db_manager()
+        
+        user_id = db_manager.create_user(email)
+        if not user_id:
+            return jsonify({
+                "status": "error",
+                "error": "Failed to get user"
+            }), 500
+        
+        success = db_manager.delete_prediction(prediction_id, user_id)
+        
+        if not success:
+            return jsonify({
+                "status": "error",
+                "error": "Prediction not found or you don't have permission"
+            }), 404
+        
+        return jsonify({
+            "status": "success",
+            "message": f"Prediction {prediction_id} deleted"
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error in delete_prediction: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "error": f"Internal server error: {str(e)}"
+        }), 500
+
+
+@prediction_bp.route('/user/<int:user_id>/predictions', methods=['GET'])
+@token_required
+def get_predictions_by_user_id(user_id):
+    """
+    Get all predictions for a specific user ID - PROTECTED ROUTE
+    Users can only access their own data
+    
+    Query Parameters:
+    - limit: Maximum number of predictions to return (default: 10)
+    """
+    try:
+        email = request.user_email
+        limit = request.args.get('limit', 10, type=int)
+        
+        from model.database import get_db_manager
+        db_manager = get_db_manager()
+        
+        # Get the authenticated user's ID
+        auth_user_id = db_manager.create_user(email)
+        if not auth_user_id:
+            return jsonify({
+                "status": "error",
+                "error": "Failed to get user"
+            }), 500
+        
+        # Check if the requested user_id matches the authenticated user
+        if auth_user_id != user_id:
+            return jsonify({
+                "status": "error",
+                "error": "You can only access your own predictions"
+            }), 403
+        
+        predictions = db_manager.get_user_predictions(user_id, limit)
+        
+        return jsonify({
+            "status": "success",
+            "user_id": user_id,
+            "count": len(predictions),
+            "data": predictions
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error in get_predictions_by_user_id: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "error": f"Internal server error: {str(e)}"
+        }), 500
+
+
+@prediction_bp.route('/user/<int:user_id>/latest', methods=['GET'])
+@token_required
+def get_latest_by_user_id(user_id):
+    """
+    Get latest prediction for a specific user ID - PROTECTED ROUTE
+    Users can only access their own data
+    """
+    try:
+        email = request.user_email
+        
+        from model.database import get_db_manager
+        db_manager = get_db_manager()
+        
+        # Get the authenticated user's ID
+        auth_user_id = db_manager.create_user(email)
+        if not auth_user_id:
+            return jsonify({
+                "status": "error",
+                "error": "Failed to get user"
+            }), 500
+        
+        # Check if the requested user_id matches the authenticated user
+        if auth_user_id != user_id:
+            return jsonify({
+                "status": "error",
+                "error": "You can only access your own predictions"
+            }), 403
+        
+        prediction = db_manager.get_latest_prediction(user_id)
+        
+        if not prediction:
+            return jsonify({
+                "status": "error",
+                "error": "No predictions found"
+            }), 404
+        
+        return jsonify({
+            "status": "success",
+            "user_id": user_id,
+            "data": prediction
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error in get_latest_by_user_id: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "error": f"Internal server error: {str(e)}"
+        }), 500
+
+
+@prediction_bp.route('/user/<int:user_id>/prediction/<int:prediction_id>', methods=['GET'])
+@token_required
+def get_prediction_by_user_id(user_id, prediction_id):
+    """
+    Get a specific prediction for a user ID - PROTECTED ROUTE
+    Users can only access their own data
+    """
+    try:
+        email = request.user_email
+        
+        from model.database import get_db_manager
+        db_manager = get_db_manager()
+        
+        # Get the authenticated user's ID
+        auth_user_id = db_manager.create_user(email)
+        if not auth_user_id:
+            return jsonify({
+                "status": "error",
+                "error": "Failed to get user"
+            }), 500
+        
+        # Check if the requested user_id matches the authenticated user
+        if auth_user_id != user_id:
+            return jsonify({
+                "status": "error",
+                "error": "You can only access your own predictions"
+            }), 403
+        
+        prediction = db_manager.get_prediction(prediction_id, user_id)
+        
+        if not prediction:
+            return jsonify({
+                "status": "error",
+                "error": f"Prediction {prediction_id} not found"
+            }), 404
+        
+        return jsonify({
+            "status": "success",
+            "user_id": user_id,
+            "data": prediction
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error in get_prediction_by_user_id: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "error": f"Internal server error: {str(e)}"
+        }), 500
+
+
+@prediction_bp.route('/user/<int:user_id>/prediction/<int:prediction_id>', methods=['PUT'])
+@token_required
+def update_prediction_by_user_id(user_id, prediction_id):
+    """
+    Update a prediction using user ID and prediction ID - PROTECTED ROUTE
+    Users can only update their own data
+    """
+    try:
+        data = request.get_json(force=True)
+        
+        if not data:
+            return jsonify({
+                "status": "error",
+                "error": "No JSON data provided"
+            }), 400
+        
+        email = request.user_email
+        
+        # Validate input
+        is_valid, error_msg = validate_input_data(data)
+        if not is_valid:
+            return jsonify({"status": "error", "error": error_msg}), 400
+        
+        # Prepare input data
+        input_data = {
+            'Age': float(data['Age']),
+            'SystolicBP': float(data['SystolicBP']),
+            'DiastolicBP': float(data['DiastolicBP']),
+            'BS': float(data['BS']),
+            'BodyTemp': float(data['BodyTemp']),
+            'BMI': float(data['BMI']),
+            'HeartRate': float(data['HeartRate']),
+            'PreviousComplications': int(data.get('PreviousComplications', 0)),
+            'PreexistingDiabetes': int(data.get('PreexistingDiabetes', 0)),
+            'GestationalDiabetes': int(data.get('GestationalDiabetes', 0)),
+            'MentalHealth': int(data.get('MentalHealth', 0))
+        }
+        
+        from model.database import get_db_manager
+        db_manager = get_db_manager()
+        
+        # Get the authenticated user's ID
+        auth_user_id = db_manager.create_user(email)
+        if not auth_user_id:
+            return jsonify({
+                "status": "error",
+                "error": "Failed to get user"
+            }), 500
+        
+        # Check if the requested user_id matches the authenticated user
+        if auth_user_id != user_id:
+            return jsonify({
+                "status": "error",
+                "error": "You can only update your own predictions"
+            }), 403
+        
+        # Check if prediction exists and belongs to user
+        existing = db_manager.get_prediction(prediction_id, user_id)
+        if not existing:
+            return jsonify({
+                "status": "error",
+                "error": f"Prediction {prediction_id} not found"
+            }), 404
+        
+        # Get predictor
+        try:
+            from model.predict import RiskAdvicePredictor
+            predictor = RiskAdvicePredictor()
+        except:
+            return jsonify({
+                "status": "error",
+                "error": "Prediction model not available"
+            }), 503
+        
+        # Make prediction
+        prediction_result = predictor.predict_risk_and_advice(input_data)
+        
+        if 'error' in prediction_result:
+            return jsonify({
+                "status": "error",
+                "error": prediction_result['error']
+            }), 500
+        
+        # Update in database
+        success = db_manager.update_prediction(user_id, prediction_id, input_data, prediction_result)
+        
+        if not success:
+            return jsonify({
+                "status": "error",
+                "error": "Failed to update prediction"
+            }), 500
+        
+        response_data = {
+            "status": "success",
+            "message": "Prediction updated successfully",
+            "data": {
+                "prediction_id": prediction_id,
+                "user_id": user_id,
+                "email": email,
+                "risk_assessment": {
+                    "risk_level": prediction_result.get('risk_level'),
+                    "confidence": prediction_result.get('risk_confidence'),
+                    "all_risk_probabilities": prediction_result.get('risk_probabilities', {})
+                },
+                "health_guidance": {
+                    "primary_advice": prediction_result.get('health_advice'),
+                    "advice_confidence": prediction_result.get('advice_confidence'),
+                    "alternative_recommendations": prediction_result.get('alternative_advice', [])
+                },
+                "patient_profile": prediction_result.get('input_summary', {}),
+                "vitals": input_data
+            }
+        }
+        
+        logger.info(f"Successfully updated prediction {prediction_id} for user {user_id}")
+        return jsonify(response_data), 200
+        
+    except Exception as e:
+        logger.error(f"Error in update_prediction_by_user_id: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({
+            "status": "error",
+            "error": f"Internal server error: {str(e)}"
+        }), 500
+
+@prediction_bp.route('/delete/<int:prediction_id>', methods=['DELETE'])
+@token_required
+def delete_prediction(prediction_id):
+    """Delete a prediction - PROTECTED ROUTE"""
+    try:
+        email = request.user_email
+        
+        from model.database import get_db_manager
+        db_manager = get_db_manager()
+        
+        user_id = db_manager.create_user(email)
+        if not user_id:
+            return jsonify({
+                "status": "error",
+                "error": "Failed to get user"
+            }), 500
+        
+        success = db_manager.delete_prediction(prediction_id, user_id)
+        
+        if not success:
+            return jsonify({
+                "status": "error",
+                "error": "Prediction not found or you don't have permission"
+            }), 404
+        
+        return jsonify({
+            "status": "success",
+            "message": f"Prediction {prediction_id} deleted"
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error in delete_prediction: {str(e)}")
+        return jsonify({
+            "status": "error",
+            "error": f"Internal server error: {str(e)}"
         }), 500

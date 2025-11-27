@@ -6,7 +6,7 @@ load_dotenv()
 
 class Config:
     # Flask settings
-    SECRET_KEY = os.getenv('SECRET_KEY', 'your-secret-key-here')
+    SECRET_KEY = os.getenv('SECRET_KEY', 'secret-key-here')
     DEBUG = True
     PORT = 5000
     

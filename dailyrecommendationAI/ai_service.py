@@ -100,9 +100,11 @@ class AIService:
         
         # Check if context is relevant to pregnancy
         context_text = "\n".join(context_chunks[:3]) if context_chunks else ""
+        logger.debug(f"Context text for relevance check: {context_text}")
+
         
         if not self.is_context_pregnancy_related(context_text):
-            logger.info("Context not relevant to pregnancy, using fallback")
+            logger.info("Context not relevant to pregnancy using fallback")
             return self.get_fallback_recommendation(user_data)
         
         try:
