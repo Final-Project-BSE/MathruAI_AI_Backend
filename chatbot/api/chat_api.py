@@ -1,5 +1,5 @@
 """
-Chat and conversation management API endpoints with user authentication.
+Chat and conversation management API with user authentication.
 """
 from flask import Blueprint, request, current_app
 from datetime import datetime
@@ -21,52 +21,10 @@ from chatbot.utils.AuthUtils import require_auth
 chat_bp = Blueprint('chat', __name__)
 logger = logging.getLogger(__name__)
 
-#debugging
-@chat_bp.route('/debug-secret', methods=['GET'])
-def debug_secret():
-    import base64
-    original_secret = current_app.config['JWT_SECRET_KEY']
-    
-    try:
-        decoded_secret = base64.b64decode(original_secret)
-        return {
-            "original_length": len(original_secret),
-            "decoded_length": len(decoded_secret),
-            "original_preview": original_secret[:20] + "...",
-            "decoded_preview": decoded_secret[:10].hex() + "..."
-        }
-    except Exception as e:
-        return {"error": str(e)}
-
-# debugging
-@chat_bp.route('/debug-token', methods=['POST'])
-def debug_token():
-    import jwt
-    from flask import request
-    
-    auth_header = request.headers.get('Authorization')
-    if not auth_header:
-        return {"error": "No Authorization header"}
-    
-    token = auth_header[7:] if auth_header.startswith('Bearer ') else auth_header
-    
-    try:
-        # Get token without verification to see its structure
-        header = jwt.get_unverified_header(token)
-        payload = jwt.decode(token, options={"verify_signature": False})
-        
-        return {
-            "header": header,
-            "payload": payload,
-            "secret_preview": current_app.config['JWT_SECRET_KEY'][:10] + "..."
-        }
-    except Exception as e:
-        return {"error": str(e)}
-
 @chat_bp.route('/chat', methods=['POST'])
 @require_auth  # using the corrected decorator
 def chat():
-    """Interactive chat with AI assistant with user-specific session support."""
+    """Interactive chat with AI assistant with user specific session support."""
     log_api_request('/chat', 'POST', request.remote_addr)
     
     # Get authenticated user
@@ -97,14 +55,14 @@ def chat():
         if param_error:
             return create_error_response(param_error, 400)
         
-        # Create session if not provided - LINKED TO USER
+        # Create session if not provided - linked to user
         if not session_id and current_app.rag_system.db_manager and current_app.rag_system.db_manager.connection:
             session_id = current_app.rag_system.db_manager.create_chat_session(
                 user_id=user_id,
                 session_name=f"Chat {datetime.now().strftime('%Y-%m-%d %H:%M')}"
             )
         
-        # Verify session belongs to current user (SECURITY CHECK)
+        # Verify session belongs to current user (security check)
         if session_id:
             session_owner = current_app.rag_system.db_manager.get_session_owner(session_id)
             if session_owner != user_id:
@@ -188,7 +146,7 @@ def get_user_chat_sessions():
         if validation_error:
             return create_error_response(validation_error, 400)
         
-        # Get sessions ONLY for the authenticated user
+        # Get sessions only for the authenticated user
         sessions = current_app.rag_system.db_manager.get_user_chat_sessions(user_id, limit)
         
         return create_success_response({
@@ -264,7 +222,7 @@ def get_user_chat_history(session_id):
         return create_error_response("Database not available", 503)
     
     try:
-        # Security check: verify session belongs to user
+        # Security check (verify session belongs to user)
         session_owner = current_app.rag_system.db_manager.get_session_owner(session_id)
         if session_owner != user_id:
             return create_error_response("Access denied to this chat session", 403)
@@ -335,7 +293,7 @@ def export_user_chat_session(session_id):
         return create_error_response("Database not available", 503)
     
     try:
-        # Security check: verify session belongs to user
+        # Security check (verify session belongs to user)
         session_owner = current_app.rag_system.db_manager.get_session_owner(session_id)
         if session_owner != user_id:
             return create_error_response("Access denied to this chat session", 403)

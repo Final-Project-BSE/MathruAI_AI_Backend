@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class DatabaseManager:
-    """Manages database connections and operations for the RAG system with user support."""
+    """Manages database connections"""
     
     def __init__(self):
         """Initialize database manager."""
@@ -471,9 +471,6 @@ class DatabaseManager:
         except Error as e:
             logger.error(f"Error getting user statistics: {e}")
             return {}
-
-    # Keep all your existing methods (store_chunk, log_search, get_chunk_stats, etc.)
-    # They remain unchanged...
     
     def log_search(self, query: str, response: str, chunks_count: int, 
                    similarity_threshold: float, top_k: int, user_id: str = None,

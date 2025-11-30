@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 class VectorRAGSystem:
     """
-    Vector-based Retrieval-Augmented Generation system for pregnancy guidance.
+    Vector based Retrieval Augmented Generation system for pregnancy guidance.
     """
     
     def __init__(self, embedding_model: str = None, chunk_size: int = None, chunk_overlap: int = None):

@@ -1,7 +1,7 @@
 """
 PDF text extraction utilities.
 """
-import fitz  # PyMuPDF
+import fitz
 from typing import Optional
 import logging
 

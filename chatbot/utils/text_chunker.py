@@ -11,9 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class TextChunker:
-    """Advanced text chunking with multiple strategies."""
-    
+class TextChunker:    
     def __init__(self, max_chunk_size: int = 800, overlap_size: int = 100, min_chunk_size: int = 100):
         """
         Initialize text chunker.
@@ -185,7 +183,7 @@ class TextChunker:
         # Try paragraph-based chunking first
         chunks = self.chunk_by_paragraphs(text)
         
-        # If chunks are still too large, use sentence-based chunking
+        # If chunks are still too large, use sentence based chunking
         final_chunks = []
         for chunk in chunks:
             if len(chunk) > self.max_chunk_size:

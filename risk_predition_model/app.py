@@ -30,7 +30,7 @@ def create_app():
     
     logger.info("Initializing database...")
     try:
-        from model.database import get_db_manager
+        from risk_predition_model.model.database import get_db_manager
         db_manager = get_db_manager()
         logger.info("✓ Database initialized")
     except Exception as e:
@@ -38,7 +38,7 @@ def create_app():
     
     logger.info("Loading prediction model...")
     try:
-        from model.predict import RiskAdvicePredictor
+        from risk_predition_model.model.predict import RiskAdvicePredictor
         predictor = RiskAdvicePredictor()
         logger.info("✓ Prediction model loaded")
     except Exception as e:
@@ -47,7 +47,7 @@ def create_app():
     # Register blueprints
     logger.info("Registering blueprints...")
     try:
-        from api.prediction import prediction_bp
+        from risk_predition_model.api.prediction import prediction_bp
         app.register_blueprint(prediction_bp, url_prefix='/api/predict')
         logger.info("✓ Prediction blueprint registered")
     except Exception as e:

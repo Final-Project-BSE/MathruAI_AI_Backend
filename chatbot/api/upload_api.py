@@ -1,5 +1,5 @@
 """
-File upload and document processing API endpoints - FIXED VERSION.
+File upload and document processing API endpoints.
 """
 from flask import Blueprint, request, current_app
 from werkzeug.utils import secure_filename
@@ -217,7 +217,6 @@ def upload_batch():
         
         total_processing_time = (datetime.now() - start_time).total_seconds()
         
-        # Get updated stats if any files were processed
         updated_stats = None
         if successful_uploads > 0:
             updated_stats = current_app.rag_system.get_system_stats()
@@ -256,7 +255,7 @@ def upload_history():
         # Get chunk statistics grouped by source file
         chunk_stats = current_app.rag_system.db_manager.get_chunk_stats()
         
-        # This is a basic implementation - can be enhanced with more detailed tracking
+        # basic implementation (can be enhanced with more detailed tracking)
         upload_history = {
             "total_documents_processed": chunk_stats.get("unique_sources", 0),
             "total_chunks_created": chunk_stats.get("total_chunks", 0),

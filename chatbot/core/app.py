@@ -96,13 +96,9 @@ def initialize_rag_system():
 
 def register_blueprints(app):
     """Register API blueprints."""
-    from chatbot.api.health_api import health_bp
-    from chatbot.api.rag_api import rag_bp
     from chatbot.api.chat_api import chat_bp
     from chatbot.api.upload_api import upload_bp
     
-    app.register_blueprint(health_bp)
-    app.register_blueprint(rag_bp)
     app.register_blueprint(chat_bp)
     app.register_blueprint(upload_bp)
 

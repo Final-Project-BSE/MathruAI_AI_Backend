@@ -1,5 +1,5 @@
 """
-JWT authentication utilities for linking Spring Boot users to chat sessions - COMPLETELY FIXED VERSION.
+JWT authentication utilities for linking Spring Boot users to chat sessions
 """
 import base64
 import jwt
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class AuthUtils:
-    """Utilities for handling JWT authentication from Spring Boot - COMPLETELY FIXED VERSION."""
+    """Utilities for handling JWT authentication from Spring Boot"""
     
     def __init__(self, jwt_secret_key):
         """
@@ -284,9 +284,7 @@ def require_auth(f):
 
 def create_debug_auth_endpoints(app):
     """
-    Create debug endpoints for JWT troubleshooting.
-    Only use in development!
-    
+    Create debug endpoints for JWT troubleshooting.    
     Args:
         app: Flask application instance
     """

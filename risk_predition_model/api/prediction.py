@@ -4,7 +4,7 @@ Secured Pregnancy Risk Prediction API Routes with JWT Authentication
 from flask import Blueprint, request, jsonify
 import logging
 import traceback
-from auth.JWTauth import token_required
+from risk_predition_model.auth.JWTauth import token_required
 
 logger = logging.getLogger(__name__)
 prediction_bp = Blueprint('prediction', __name__)
@@ -39,28 +39,7 @@ def validate_input_data(data):
 @prediction_bp.route('/store', methods=['POST'])
 @token_required
 def store_prediction():
-    """
-    Store new prediction - PROTECTED ROUTE
-    Automatically uses authenticated user's email from JWT token
-    
-    Request Headers:
-    Authorization: Bearer <jwt_token>
-    
-    Request body:
-    {
-        "Age": 25,
-        "SystolicBP": 120,
-        "DiastolicBP": 80,
-        "BS": 100,
-        "BodyTemp": 98.6,
-        "BMI": 22.5,
-        "HeartRate": 75,
-        "PreviousComplications": 0,
-        "PreexistingDiabetes": 0,
-        "GestationalDiabetes": 0,
-        "MentalHealth": 0
-    }
-    """
+    """Store new prediction - PROTECTED ROUTE"""
     try:
         data = request.get_json(force=True)
         
@@ -70,15 +49,12 @@ def store_prediction():
                 "error": "No JSON data provided"
             }), 400
         
-        # Get email from JWT token (set by @token_required decorator)
         email = request.user_email
         
-        # Validate input
         is_valid, error_msg = validate_input_data(data)
         if not is_valid:
             return jsonify({"status": "error", "error": error_msg}), 400
         
-        # Prepare input data
         input_data = {
             'Age': float(data['Age']),
             'SystolicBP': float(data['SystolicBP']),
@@ -95,11 +71,9 @@ def store_prediction():
         
         logger.info(f"Processing prediction for authenticated user: {email}")
         
-        # Get database manager
-        from model.database import get_db_manager
+        from risk_predition_model.model.database import get_db_manager
         db_manager = get_db_manager()
         
-        # Create or get user
         user_id = db_manager.create_user(email)
         if not user_id:
             return jsonify({
@@ -107,9 +81,8 @@ def store_prediction():
                 "error": "Failed to create user"
             }), 500
         
-        # Get predictor
         try:
-            from model.predict import RiskAdvicePredictor
+            from risk_predition_model.model.predict import RiskAdvicePredictor
             predictor = RiskAdvicePredictor()
         except:
             return jsonify({
@@ -117,7 +90,6 @@ def store_prediction():
                 "error": "Prediction model not available"
             }), 503
         
-        # Make prediction
         prediction_result = predictor.predict_risk_and_advice(input_data)
         
         if 'error' in prediction_result:
@@ -126,7 +98,6 @@ def store_prediction():
                 "error": prediction_result['error']
             }), 500
         
-        # Store in database
         prediction_id = db_manager.store_prediction(user_id, input_data, prediction_result)
         
         if not prediction_id:
@@ -173,10 +144,7 @@ def store_prediction():
 @prediction_bp.route('/update/<int:prediction_id>', methods=['PUT'])
 @token_required
 def update_prediction(prediction_id):
-    """
-    Update existing prediction - PROTECTED ROUTE
-    Only the owner can update their prediction
-    """
+    """Update existing prediction - PROTECTED ROUTE"""
     try:
         data = request.get_json(force=True)
         
@@ -186,15 +154,12 @@ def update_prediction(prediction_id):
                 "error": "No JSON data provided"
             }), 400
         
-        # Get email from JWT token
         email = request.user_email
         
-        # Validate input
         is_valid, error_msg = validate_input_data(data)
         if not is_valid:
             return jsonify({"status": "error", "error": error_msg}), 400
         
-        # Prepare input data
         input_data = {
             'Age': float(data['Age']),
             'SystolicBP': float(data['SystolicBP']),
@@ -211,11 +176,9 @@ def update_prediction(prediction_id):
         
         logger.info(f"Updating prediction {prediction_id} for user: {email}")
         
-        # Get database manager
-        from model.database import get_db_manager
+        from risk_predition_model.model.database import get_db_manager
         db_manager = get_db_manager()
         
-        # Get user
         user_id = db_manager.create_user(email)
         if not user_id:
             return jsonify({
@@ -223,7 +186,6 @@ def update_prediction(prediction_id):
                 "error": "Failed to get user"
             }), 500
         
-        # Check if prediction exists and belongs to user
         existing = db_manager.get_prediction(prediction_id, user_id)
         if not existing:
             return jsonify({
@@ -231,9 +193,8 @@ def update_prediction(prediction_id):
                 "error": f"Prediction {prediction_id} not found or you don't have permission"
             }), 404
         
-        # Get predictor
         try:
-            from model.predict import RiskAdvicePredictor
+            from risk_predition_model.model.predict import RiskAdvicePredictor
             predictor = RiskAdvicePredictor()
         except:
             return jsonify({
@@ -241,7 +202,6 @@ def update_prediction(prediction_id):
                 "error": "Prediction model not available"
             }), 503
         
-        # Make prediction
         prediction_result = predictor.predict_risk_and_advice(input_data)
         
         if 'error' in prediction_result:
@@ -250,7 +210,6 @@ def update_prediction(prediction_id):
                 "error": prediction_result['error']
             }), 500
         
-        # Update in database
         success = db_manager.update_prediction(user_id, prediction_id, input_data, prediction_result)
         
         if not success:
@@ -300,7 +259,7 @@ def get_prediction(prediction_id):
     try:
         email = request.user_email
         
-        from model.database import get_db_manager
+        from risk_predition_model.model.database import get_db_manager
         db_manager = get_db_manager()
         
         user_id = db_manager.create_user(email)
@@ -338,7 +297,7 @@ def get_latest():
     try:
         email = request.user_email
         
-        from model.database import get_db_manager
+        from risk_predition_model.model.database import get_db_manager
         db_manager = get_db_manager()
         
         user_id = db_manager.create_user(email)
@@ -377,7 +336,7 @@ def get_history():
         email = request.user_email
         limit = request.args.get('limit', 10, type=int)
         
-        from model.database import get_db_manager
+        from risk_predition_model.model.database import get_db_manager
         db_manager = get_db_manager()
         
         user_id = db_manager.create_user(email)
@@ -402,6 +361,7 @@ def get_history():
             "error": f"Internal server error: {str(e)}"
         }), 500
 
+
 @prediction_bp.route('/delete/<int:prediction_id>', methods=['DELETE'])
 @token_required
 def delete_prediction(prediction_id):
@@ -409,7 +369,7 @@ def delete_prediction(prediction_id):
     try:
         email = request.user_email
         
-        from model.database import get_db_manager
+        from risk_predition_model.model.database import get_db_manager
         db_manager = get_db_manager()
         
         user_id = db_manager.create_user(email)
@@ -440,24 +400,18 @@ def delete_prediction(prediction_id):
         }), 500
 
 
+# User-specific endpoints
 @prediction_bp.route('/user/<int:user_id>/predictions', methods=['GET'])
 @token_required
 def get_predictions_by_user_id(user_id):
-    """
-    Get all predictions for a specific user ID - PROTECTED ROUTE
-    Users can only access their own data
-    
-    Query Parameters:
-    - limit: Maximum number of predictions to return (default: 10)
-    """
+    """Get all predictions for a specific user ID - PROTECTED ROUTE"""
     try:
         email = request.user_email
         limit = request.args.get('limit', 10, type=int)
         
-        from model.database import get_db_manager
+        from risk_predition_model.model.database import get_db_manager
         db_manager = get_db_manager()
         
-        # Get the authenticated user's ID
         auth_user_id = db_manager.create_user(email)
         if not auth_user_id:
             return jsonify({
@@ -465,7 +419,6 @@ def get_predictions_by_user_id(user_id):
                 "error": "Failed to get user"
             }), 500
         
-        # Check if the requested user_id matches the authenticated user
         if auth_user_id != user_id:
             return jsonify({
                 "status": "error",
@@ -492,17 +445,13 @@ def get_predictions_by_user_id(user_id):
 @prediction_bp.route('/user/<int:user_id>/latest', methods=['GET'])
 @token_required
 def get_latest_by_user_id(user_id):
-    """
-    Get latest prediction for a specific user ID - PROTECTED ROUTE
-    Users can only access their own data
-    """
+    """Get latest prediction for a specific user ID - PROTECTED ROUTE"""
     try:
         email = request.user_email
         
-        from model.database import get_db_manager
+        from risk_predition_model.model.database import get_db_manager
         db_manager = get_db_manager()
         
-        # Get the authenticated user's ID
         auth_user_id = db_manager.create_user(email)
         if not auth_user_id:
             return jsonify({
@@ -510,7 +459,6 @@ def get_latest_by_user_id(user_id):
                 "error": "Failed to get user"
             }), 500
         
-        # Check if the requested user_id matches the authenticated user
         if auth_user_id != user_id:
             return jsonify({
                 "status": "error",
@@ -542,17 +490,13 @@ def get_latest_by_user_id(user_id):
 @prediction_bp.route('/user/<int:user_id>/prediction/<int:prediction_id>', methods=['GET'])
 @token_required
 def get_prediction_by_user_id(user_id, prediction_id):
-    """
-    Get a specific prediction for a user ID - PROTECTED ROUTE
-    Users can only access their own data
-    """
+    """Get a specific prediction for a user ID - PROTECTED ROUTE"""
     try:
         email = request.user_email
         
-        from model.database import get_db_manager
+        from risk_predition_model.model.database import get_db_manager
         db_manager = get_db_manager()
         
-        # Get the authenticated user's ID
         auth_user_id = db_manager.create_user(email)
         if not auth_user_id:
             return jsonify({
@@ -560,7 +504,6 @@ def get_prediction_by_user_id(user_id, prediction_id):
                 "error": "Failed to get user"
             }), 500
         
-        # Check if the requested user_id matches the authenticated user
         if auth_user_id != user_id:
             return jsonify({
                 "status": "error",
@@ -592,10 +535,7 @@ def get_prediction_by_user_id(user_id, prediction_id):
 @prediction_bp.route('/user/<int:user_id>/prediction/<int:prediction_id>', methods=['PUT'])
 @token_required
 def update_prediction_by_user_id(user_id, prediction_id):
-    """
-    Update a prediction using user ID and prediction ID - PROTECTED ROUTE
-    Users can only update their own data
-    """
+    """Update a prediction using user ID and prediction ID - PROTECTED ROUTE"""
     try:
         data = request.get_json(force=True)
         
@@ -607,12 +547,10 @@ def update_prediction_by_user_id(user_id, prediction_id):
         
         email = request.user_email
         
-        # Validate input
         is_valid, error_msg = validate_input_data(data)
         if not is_valid:
             return jsonify({"status": "error", "error": error_msg}), 400
         
-        # Prepare input data
         input_data = {
             'Age': float(data['Age']),
             'SystolicBP': float(data['SystolicBP']),
@@ -627,10 +565,9 @@ def update_prediction_by_user_id(user_id, prediction_id):
             'MentalHealth': int(data.get('MentalHealth', 0))
         }
         
-        from model.database import get_db_manager
+        from risk_predition_model.model.database import get_db_manager
         db_manager = get_db_manager()
         
-        # Get the authenticated user's ID
         auth_user_id = db_manager.create_user(email)
         if not auth_user_id:
             return jsonify({
@@ -638,14 +575,12 @@ def update_prediction_by_user_id(user_id, prediction_id):
                 "error": "Failed to get user"
             }), 500
         
-        # Check if the requested user_id matches the authenticated user
         if auth_user_id != user_id:
             return jsonify({
                 "status": "error",
                 "error": "You can only update your own predictions"
             }), 403
         
-        # Check if prediction exists and belongs to user
         existing = db_manager.get_prediction(prediction_id, user_id)
         if not existing:
             return jsonify({
@@ -653,9 +588,8 @@ def update_prediction_by_user_id(user_id, prediction_id):
                 "error": f"Prediction {prediction_id} not found"
             }), 404
         
-        # Get predictor
         try:
-            from model.predict import RiskAdvicePredictor
+            from risk_predition_model.model.predict import RiskAdvicePredictor
             predictor = RiskAdvicePredictor()
         except:
             return jsonify({
@@ -663,7 +597,6 @@ def update_prediction_by_user_id(user_id, prediction_id):
                 "error": "Prediction model not available"
             }), 503
         
-        # Make prediction
         prediction_result = predictor.predict_risk_and_advice(input_data)
         
         if 'error' in prediction_result:
@@ -672,7 +605,6 @@ def update_prediction_by_user_id(user_id, prediction_id):
                 "error": prediction_result['error']
             }), 500
         
-        # Update in database
         success = db_manager.update_prediction(user_id, prediction_id, input_data, prediction_result)
         
         if not success:
@@ -709,43 +641,6 @@ def update_prediction_by_user_id(user_id, prediction_id):
     except Exception as e:
         logger.error(f"Error in update_prediction_by_user_id: {str(e)}")
         logger.error(traceback.format_exc())
-        return jsonify({
-            "status": "error",
-            "error": f"Internal server error: {str(e)}"
-        }), 500
-
-@prediction_bp.route('/delete/<int:prediction_id>', methods=['DELETE'])
-@token_required
-def delete_prediction(prediction_id):
-    """Delete a prediction - PROTECTED ROUTE"""
-    try:
-        email = request.user_email
-        
-        from model.database import get_db_manager
-        db_manager = get_db_manager()
-        
-        user_id = db_manager.create_user(email)
-        if not user_id:
-            return jsonify({
-                "status": "error",
-                "error": "Failed to get user"
-            }), 500
-        
-        success = db_manager.delete_prediction(prediction_id, user_id)
-        
-        if not success:
-            return jsonify({
-                "status": "error",
-                "error": "Prediction not found or you don't have permission"
-            }), 404
-        
-        return jsonify({
-            "status": "success",
-            "message": f"Prediction {prediction_id} deleted"
-        }), 200
-        
-    except Exception as e:
-        logger.error(f"Error in delete_prediction: {str(e)}")
         return jsonify({
             "status": "error",
             "error": f"Internal server error: {str(e)}"

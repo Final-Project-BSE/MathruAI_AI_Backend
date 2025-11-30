@@ -1,5 +1,5 @@
 """
-Flask application initialization with user authentication integration - FIXED VERSION.
+Flask application initialization with user authentication integration.
 """
 from flask import Flask
 from flask_cors import CORS
@@ -7,10 +7,8 @@ import logging
 import os
 
 # Import all blueprints that should be available
-from chatbot.api.chat_api import chat_bp  # This one works
-from chatbot.api.upload_api import upload_bp  # Import missing upload blueprint
-from chatbot.api.rag_api import rag_bp  # Import missing RAG blueprint  
-from chatbot.api.health_api import health_bp  # Import missing health blueprint
+from chatbot.api.chat_api import chat_bp
+from chatbot.api.upload_api import upload_bp 
 
 from chatbot.utils.response_utils import create_error_response
 from chatbot.database.manager import DatabaseManager
@@ -62,13 +60,7 @@ def create_app():
         app.db_manager = None
     
     # Initialize your RAG system
-    try:
-        # Replace this with your actual RAG system initialization
-        # from your_rag_module import YourRAGSystem
-        # rag_system = YourRAGSystem(db_manager)
-        # app.rag_system = rag_system
-        
-        # For now, create a mock rag_system object for testing
+    try:   
         class MockRAGSystem:
             def __init__(self, db_manager):
                 self.db_manager = db_manager
@@ -99,7 +91,7 @@ def create_app():
         logger.error(f"Failed to initialize RAG system: {e}")
         app.rag_system = None
     
-    # REGISTER ALL BLUEPRINTS - THIS WAS THE MISSING PART
+    # REGISTER ALL BLUEPRINTS
     try:
         # Chat API (this one was already working)
         app.register_blueprint(chat_bp, url_prefix='/api')
@@ -108,14 +100,6 @@ def create_app():
         # Upload API (was missing)
         app.register_blueprint(upload_bp, url_prefix='/api')
         logger.info("Registered upload blueprint at /api")
-        
-        # RAG search API (was missing)
-        app.register_blueprint(rag_bp, url_prefix='/api')
-        logger.info("Registered RAG blueprint at /api")
-        
-        # Health API (was missing)
-        app.register_blueprint(health_bp, url_prefix='/api')
-        logger.info("Registered health blueprint at /api")
         
     except ImportError as e:
         logger.error(f"Failed to import blueprint: {e}")
