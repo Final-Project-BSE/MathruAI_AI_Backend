@@ -8,7 +8,7 @@ from dailyrecommendationAI.pregnancy_rag_system import PregnancyRAGSystem
 
 logger = logging.getLogger(__name__)
 
-# Create blueprint for API routes - REMOVE the /api prefix since it will be added by main.py
+# Create blueprint for API routes
 api = Blueprint('api', __name__)
 
 # Initialize RAG system
@@ -62,69 +62,59 @@ def upload_pdf():
         logger.error(f"Upload error: {e}")
         return jsonify({'error': str(e)}), 500
 
-@api.route('/register', methods=['POST'])
-def register_user():
-    """Register a new user"""
-    try:
-        data = request.get_json()
-        
-        if not data:
-            return jsonify({'error': 'No JSON data provided'}), 400
-        
-        name = data.get('name')
-        pregnancy_week = data.get('pregnancy_week')
-        preferences = data.get('preferences', '')
-        
-        if not name or not pregnancy_week:
-            return jsonify({'error': 'Name and pregnancy_week are required'}), 400
-        
-        if not isinstance(pregnancy_week, int) or pregnancy_week < 1 or pregnancy_week > 42:
-            return jsonify({'error': 'Pregnancy week must be between 1 and 42'}), 400
-        
-        if not rag_system.database_manager.is_connected():
-            return jsonify({'error': 'Database connection not available'}), 500
-        
-        user_id = rag_system.register_user(name, pregnancy_week, preferences)
-        
-        return jsonify({
-            'message': 'User registered successfully',
-            'user_id': user_id,
-            'name': name,
-            'pregnancy_week': pregnancy_week,
-            'preferences': preferences
-        })
-        
-    except Exception as e:
-        logger.error(f"Registration error: {e}")
-        return jsonify({'error': str(e)}), 500
-
 @api.route('/user/<int:user_id>', methods=['GET'])
 def get_user(user_id):
-    """Get user information"""
+    """Get user information and latest user data"""
     try:
         if not rag_system.database_manager.is_connected():
             return jsonify({'error': 'Database connection not available'}), 500
         
+        # Get user from users table
         user = rag_system.get_user(user_id)
-        
         if not user:
             return jsonify({'error': 'User not found'}), 404
         
-        return jsonify({
+        # Get latest user data
+        user_data = rag_system.get_user_data(user_id)
+        
+        response = {
             'user_id': user['id'],
             'name': user['name'],
-            'pregnancy_week': user['pregnancy_week'],
-            'preferences': user['preferences'],
-            'created_at': user['created_at'].isoformat() if user['created_at'] else None
-        })
+            'created_at': user['created_at'].isoformat() if user.get('created_at') else None
+        }
+        
+        if user_data:
+            response.update({
+                'pregnancy_week': user_data['pregnancy_week'],
+                'preferences': user_data['preferences'],
+                'data_updated_at': user_data['updated_at'].isoformat() if user_data.get('updated_at') else None
+            })
+        else:
+            # Fallback to users table data
+            response.update({
+                'pregnancy_week': user.get('pregnancy_week'),
+                'preferences': user.get('preferences', ''),
+                'data_updated_at': None
+            })
+        
+        return jsonify(response)
         
     except Exception as e:
         logger.error(f"Get user error: {e}")
         return jsonify({'error': str(e)}), 500
 
-@api.route('/user/<int:user_id>', methods=['PUT'])
-def update_user(user_id):
-    """Update user information"""
+@api.route('/user/<int:user_id>/data', methods=['PUT'])
+def update_user_data(user_id):
+    """
+    Update user data (pregnancy_week and/or preferences)
+    
+    Request body:
+    {
+        "pregnancy_week": 25,  // optional
+        "preferences": "vegetarian, yoga",  // optional
+        "regenerate_recommendation": true  // optional, default true
+    }
+    """
     try:
         data = request.get_json()
         
@@ -140,44 +130,110 @@ def update_user(user_id):
             return jsonify({'error': 'User not found'}), 404
         
         # Get update fields
-        name = data.get('name')
         pregnancy_week = data.get('pregnancy_week')
         preferences = data.get('preferences')
+        regenerate = data.get('regenerate_recommendation', True)
         
-        if pregnancy_week is not None and (not isinstance(pregnancy_week, int) or pregnancy_week < 1 or pregnancy_week > 42):
-            return jsonify({'error': 'Pregnancy week must be between 1 and 42'}), 400
+        # Validate pregnancy week if provided
+        if pregnancy_week is not None:
+            if not isinstance(pregnancy_week, int) or pregnancy_week < 1 or pregnancy_week > 42:
+                return jsonify({'error': 'Pregnancy week must be between 1 and 42'}), 400
         
-        # Update user
-        success = rag_system.update_user(user_id, name, pregnancy_week, preferences)
+        # At least one field must be provided
+        if pregnancy_week is None and preferences is None:
+            return jsonify({'error': 'At least one field (pregnancy_week or preferences) must be provided'}), 400
         
-        if not success:
-            return jsonify({'error': 'Failed to update user'}), 500
+        # Update user data
+        result = rag_system.update_user_data(
+            user_id=user_id,
+            pregnancy_week=pregnancy_week,
+            preferences=preferences,
+            regenerate_today=regenerate
+        )
+        
+        if not result['success']:
+            return jsonify({'error': result.get('error', 'Failed to update user data')}), 500
         
         # Get updated user data
-        updated_user = rag_system.get_user(user_id)
+        updated_user_data = rag_system.get_user_data(user_id)
+        
+        response = {
+            'message': 'User data updated successfully',
+            'user_id': user_id,
+            'updated_data': {
+                'pregnancy_week': updated_user_data['pregnancy_week'],
+                'preferences': updated_user_data['preferences'],
+                'updated_at': updated_user_data['updated_at'].isoformat() if updated_user_data.get('updated_at') else None
+            }
+        }
+        
+        # Include new recommendation if it was regenerated
+        if result.get('recommendation_regenerated'):
+            response['new_recommendation'] = result['new_recommendation']
+        
+        return jsonify(response)
+        
+    except Exception as e:
+        logger.error(f"Update user data error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@api.route('/user/<int:user_id>/data/history', methods=['GET'])
+def get_user_data_history(user_id):
+    """Get user data update history"""
+    try:
+        if not rag_system.database_manager.is_connected():
+            return jsonify({'error': 'Database connection not available'}), 500
+        
+        # Check if user exists
+        user = rag_system.get_user(user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Get limit parameter
+        limit = request.args.get('limit', 10, type=int)
+        if limit < 1 or limit > 100:
+            limit = 10
+        
+        # Get history
+        history = rag_system.get_user_data_history(user_id, limit)
+        
+        formatted_history = []
+        for record in history:
+            formatted_history.append({
+                'pregnancy_week': record['pregnancy_week'],
+                'preferences': record['preferences'],
+                'updated_at': record['updated_at'].isoformat() if record.get('updated_at') else None,
+                'created_at': record['created_at'].isoformat() if record.get('created_at') else None
+            })
         
         return jsonify({
-            'message': 'User updated successfully',
             'user_id': user_id,
-            'name': updated_user['name'],
-            'pregnancy_week': updated_user['pregnancy_week'],
-            'preferences': updated_user['preferences']
+            'history_count': len(formatted_history),
+            'history': formatted_history
         })
         
     except Exception as e:
-        logger.error(f"Update user error: {e}")
+        logger.error(f"Get user data history error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @api.route('/recommendation/<int:user_id>', methods=['GET'])
 def get_recommendation(user_id):
-    """Get daily recommendation for user"""
+    """
+    Get daily recommendation for user
+    
+    Query parameters:
+    - force_regenerate: If 'true', regenerate even if recommendation exists for today
+    """
     try:
-        recommendation = rag_system.get_daily_recommendation(user_id)
+        force_regenerate = request.args.get('force_regenerate', 'false').lower() == 'true'
+        
+        recommendation = rag_system.get_daily_recommendation(user_id, force_regenerate=force_regenerate)
         
         return jsonify({
             'user_id': user_id,
             'date': datetime.now().strftime('%Y-%m-%d'),
-            'recommendation': recommendation
+            'recommendation': recommendation,
+            'regenerated': force_regenerate
         })
         
     except Exception as e:
@@ -228,14 +284,19 @@ def get_recommendation_history(user_id):
         if not rag_system.database_manager.is_connected():
             return jsonify({'error': 'Database connection not available'}), 500
         
-        recommendations = rag_system.get_recommendation_history(user_id)
+        # Get limit parameter
+        limit = request.args.get('limit', 30, type=int)
+        if limit < 1 or limit > 100:
+            limit = 30
+        
+        recommendations = rag_system.get_recommendation_history(user_id, limit)
         
         formatted_recommendations = []
         for rec in recommendations:
             formatted_recommendations.append({
-                'date': rec['recommendation_date'].isoformat() if rec['recommendation_date'] else None,
+                'date': rec['recommendation_date'].isoformat() if rec.get('recommendation_date') else None,
                 'recommendation': rec['recommendation'],
-                'created_at': rec['created_at'].isoformat() if rec['created_at'] else None
+                'created_at': rec['created_at'].isoformat() if rec.get('created_at') else None
             })
         
         return jsonify({
