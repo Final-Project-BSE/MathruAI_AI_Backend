@@ -5,6 +5,7 @@ from werkzeug.utils import secure_filename
 import logging
 from dailyrecommendationAI.config import Config
 from dailyrecommendationAI.pregnancy_rag_system import PregnancyRAGSystem
+from dailyrecommendationAI.jwt_auth import token_required, optional_token, jwt_auth
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ def health_check():
     })
 
 @api.route('/upload-pdf', methods=['POST'])
+@token_required
 def upload_pdf():
     """Upload and process PDF file"""
     try:
@@ -53,7 +55,8 @@ def upload_pdf():
             return jsonify({
                 'message': f'File {filename} uploaded and processed successfully',
                 'filename': filename,
-                'vector_db_size': len(rag_system.vector_database.document_chunks)
+                'vector_db_size': len(rag_system.vector_database.document_chunks),
+                'uploaded_by': request.user_email
             })
         else:
             return jsonify({'error': 'Failed to process PDF file'}), 500
@@ -63,9 +66,10 @@ def upload_pdf():
         return jsonify({'error': str(e)}), 500
 
 @api.route('/user/<int:user_id>', methods=['GET'])
+@token_required
 def get_user(user_id):
-    """Get user information and latest user data"""
-    try:
+    """Get user information"""
+    try:  
         if not rag_system.database_manager.is_connected():
             return jsonify({'error': 'Database connection not available'}), 500
         
@@ -79,8 +83,9 @@ def get_user(user_id):
         
         response = {
             'user_id': user['id'],
-            'name': user['name'],
-            'created_at': user['created_at'].isoformat() if user.get('created_at') else None
+            'name': user['first_name'],
+            'created_at': user['created_at'].isoformat() if user.get('created_at') else None,
+            'requested_by': request.user_email
         }
         
         if user_data:
@@ -90,7 +95,6 @@ def get_user(user_id):
                 'data_updated_at': user_data['updated_at'].isoformat() if user_data.get('updated_at') else None
             })
         else:
-            # Fallback to users table data
             response.update({
                 'pregnancy_week': user.get('pregnancy_week'),
                 'preferences': user.get('preferences', ''),
@@ -104,17 +108,9 @@ def get_user(user_id):
         return jsonify({'error': str(e)}), 500
 
 @api.route('/user/<int:user_id>/data', methods=['PUT'])
+@token_required
 def update_user_data(user_id):
-    """
-    Update user data (pregnancy_week and/or preferences)
-    
-    Request body:
-    {
-        "pregnancy_week": 25,  // optional
-        "preferences": "vegetarian, yoga",  // optional
-        "regenerate_recommendation": true  // optional, default true
-    }
-    """
+    """Update user data"""
     try:
         data = request.get_json()
         
@@ -160,6 +156,7 @@ def update_user_data(user_id):
         response = {
             'message': 'User data updated successfully',
             'user_id': user_id,
+            'updated_by': request.user_email,
             'updated_data': {
                 'pregnancy_week': updated_user_data['pregnancy_week'],
                 'preferences': updated_user_data['preferences'],
@@ -178,6 +175,7 @@ def update_user_data(user_id):
         return jsonify({'error': str(e)}), 500
 
 @api.route('/user/<int:user_id>/data/history', methods=['GET'])
+@token_required
 def get_user_data_history(user_id):
     """Get user data update history"""
     try:
@@ -217,13 +215,9 @@ def get_user_data_history(user_id):
         return jsonify({'error': str(e)}), 500
 
 @api.route('/recommendation/<int:user_id>', methods=['GET'])
+@token_required
 def get_recommendation(user_id):
-    """
-    Get daily recommendation for user
-    
-    Query parameters:
-    - force_regenerate: If 'true', regenerate even if recommendation exists for today
-    """
+    """Get daily recommendation for user"""
     try:
         force_regenerate = request.args.get('force_regenerate', 'false').lower() == 'true'
         
@@ -233,7 +227,8 @@ def get_recommendation(user_id):
             'user_id': user_id,
             'date': datetime.now().strftime('%Y-%m-%d'),
             'recommendation': recommendation,
-            'regenerated': force_regenerate
+            'regenerated': force_regenerate,
+            'requested_by': request.user_email
         })
         
     except Exception as e:
@@ -241,8 +236,9 @@ def get_recommendation(user_id):
         return jsonify({'error': str(e)}), 500
 
 @api.route('/search', methods=['POST'])
+@token_required
 def search_knowledge_base():
-    """Search the knowledge base for relevant information"""
+    """Search the knowledge base"""
     try:
         data = request.get_json()
         
@@ -278,8 +274,9 @@ def search_knowledge_base():
         return jsonify({'error': str(e)}), 500
 
 @api.route('/recommendations/history/<int:user_id>', methods=['GET'])
+@token_required
 def get_recommendation_history(user_id):
-    """Get recommendation history for user"""
+    """Get recommendation history"""
     try:
         if not rag_system.database_manager.is_connected():
             return jsonify({'error': 'Database connection not available'}), 500
@@ -310,10 +307,12 @@ def get_recommendation_history(user_id):
         return jsonify({'error': str(e)}), 500
 
 @api.route('/debug/recommendation/<int:user_id>', methods=['GET'])
+@token_required
 def debug_recommendation(user_id):
-    """Debug endpoint to check recommendation generation process"""
+    """Debug endpoint"""
     try:
         debug_info = rag_system.get_debug_info(user_id)
+        debug_info['requested_by'] = request.user_email
         return jsonify(debug_info)
         
     except Exception as e:
@@ -321,15 +320,29 @@ def debug_recommendation(user_id):
         return jsonify({'error': str(e)}), 500
 
 @api.route('/stats', methods=['GET'])
+@optional_token
 def get_stats():
-    """Get system statistics"""
+    """Get system statistics - Optional authentication"""
     try:
         stats = rag_system.get_system_stats()
+        if request.user_email:
+            stats['requested_by'] = request.user_email
         return jsonify(stats)
         
     except Exception as e:
         logger.error(f"Get stats error: {e}")
         return jsonify({'error': str(e)}), 500
+
+# Authentication test endpoint
+@api.route('/auth/test', methods=['GET'])
+@token_required
+def test_auth():
+    """Test authentication endpoint"""
+    return jsonify({
+        'message': 'Authentication successful',
+        'user_email': request.user_email,
+        'token_payload': request.token_payload
+    })
 
 # Error handlers
 @api.errorhandler(404)

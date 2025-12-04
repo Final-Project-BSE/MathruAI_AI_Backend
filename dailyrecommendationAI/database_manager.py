@@ -13,7 +13,7 @@ class DatabaseManager:
         self.init_database()
     
     def init_database(self):
-        """Initialize MySQL database for user data updates and recommendations history"""
+        """Initialize MySQL database"""
         try:
             self.connection = mysql.connector.connect(
                 host=Config.DB_HOST,
@@ -24,7 +24,7 @@ class DatabaseManager:
             
             cursor = self.connection.cursor()
             
-            # Create user_data table (for updates) - users table already exists
+            # Create user_data table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS user_data (
                     id INT AUTO_INCREMENT PRIMARY KEY,

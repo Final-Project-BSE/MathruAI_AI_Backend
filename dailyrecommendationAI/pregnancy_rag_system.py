@@ -112,13 +112,13 @@ class PregnancyRAGSystem:
             force_regenerate: If True, regenerate even if recommendation exists for today
         """
         try:
-            # Get user from main users table (for name, etc.)
+            # Get user from main users table
             user = self.database_manager.get_user(user_id)
             if not user:
                 logger.error(f"User {user_id} not found")
                 return "User not found"
             
-            # Get latest user data (from user_data table or fallback to users table)
+            # Get latest user data
             user_data = self.database_manager.get_latest_user_data(user_id)
             if not user_data:
                 logger.error(f"No user data found for user {user_id}")
@@ -150,7 +150,7 @@ class PregnancyRAGSystem:
             
             logger.info(f"Found {len(context_chunks)} relevant chunks")
             
-            # Generate recommendation (either AI or fallback)
+            # Generate recommendation
             if context_chunks:
                 chunk_texts = [chunk[0] for chunk in context_chunks]
                 logger.info("Attempting to generate AI recommendation with context")

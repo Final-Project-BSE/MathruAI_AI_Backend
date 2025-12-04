@@ -65,7 +65,7 @@ class PDFProcessor:
         return chunks
     
     def process_pdf(self, pdf_path: str) -> Tuple[bool, List[str], str]:
-        """Process PDF and return success status, chunks, and any error message"""
+        """Process PDF and return success status, chunks and any error message"""
         try:
             # Extract text
             text = self.extract_text_from_pdf(pdf_path)
@@ -91,7 +91,7 @@ class PDFProcessor:
         if not text or len(text.strip()) < 50:
             return False
         
-        # Check if text contains meaningful words (not just special characters)
+        # Check if text contains meaningful words
         words = word_tokenize(text.lower())
         meaningful_words = [word for word in words if word.isalpha() and len(word) > 2]
         
