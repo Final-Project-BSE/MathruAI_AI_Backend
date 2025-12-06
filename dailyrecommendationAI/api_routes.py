@@ -344,6 +344,36 @@ def test_auth():
         'token_payload': request.token_payload
     })
 
+# Add this to your api_routes.py
+@api.route('/auth/me', methods=['GET'])
+@token_required
+def get_current_user():
+    """Get current authenticated user info"""
+    try:
+        # Extract email from token
+        email = request.user_email
+        
+        if not email:
+            return jsonify({'error': 'Could not extract user email from token'}), 400
+        
+        # Find user by email in database
+        cursor = rag_system.database_manager.connection.cursor(dictionary=True)
+        cursor.execute("SELECT id, first_name, email FROM users WHERE email = %s", (email,))
+        user = cursor.fetchone()
+        
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        return jsonify({
+            'user_id': user['id'],
+            'name': user['first_name'],
+            'email': user['email']
+        })
+        
+    except Exception as e:
+        logger.error(f"Get current user error: {e}")
+        return jsonify({'error': str(e)}), 500
+
 # Error handlers
 @api.errorhandler(404)
 def not_found(error):
