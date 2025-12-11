@@ -14,7 +14,7 @@ class DatabaseConfig:
     HOST: str = os.getenv('MYSQL_HOST', 'localhost')
     USER: str = os.getenv('MYSQL_USER', 'root')
     PASSWORD: str = os.getenv('MYSQL_PASSWORD', '20000624')
-    DATABASE: str = os.getenv('MYSQL_DATABASE', 'rag_system')
+    DATABASE: str = os.getenv('MYSQL_DATABASE', 'MathruAi_Database')
     PORT: int = int(os.getenv('MYSQL_PORT', '3306'))
 
 
