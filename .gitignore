@@ -29,7 +29,8 @@ kb_cache.pkl
 
 # PDF uploads (optional)
 data/*.pdf
-uploads
+uploads/
+**/uploads/
 
 # VS Code
 .vscode/
