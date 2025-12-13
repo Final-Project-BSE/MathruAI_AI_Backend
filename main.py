@@ -19,6 +19,23 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# Configure logging to use chatbot/logs directory
+chatbot_log_dir = os.path.join(project_root, 'chatbot', 'logs')
+os.makedirs(chatbot_log_dir, exist_ok=True)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(os.path.join(chatbot_log_dir, 'app.log')),
+        logging.StreamHandler()
+    ]
+)
+
+logger = logging.getLogger(__name__)
+logger.info(f"Project root: {project_root}")
+logger.info(f"Chatbot logs: {chatbot_log_dir}")
+
 
 def auto_setup_mysql():
     """Automatically setup MySQL database and tables"""
@@ -91,12 +108,23 @@ def load_rag_system(app):
         from chatbot.database.manager import DatabaseManager
         from chatbot.utils.AuthUtils import AuthUtils
         from chatbot.api.upload_api import upload_bp
+        from chatbot.config.settings import RAGConfig
         
         # Initialize authentication
         app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'U2VjdXJlSldUS2V5MTIzITIzITIzIUxvbmdFbm91hfshfjshfZ2gadsd')
         logger.info("JWT Secret configured")
         auth_utils = AuthUtils(app.config['JWT_SECRET_KEY'])
         app.auth_utils = auth_utils
+        
+         # Configure upload settings using RAGConfig paths
+        app.config['ALLOWED_EXTENSIONS'] = {'pdf'}
+        app.config['UPLOAD_FOLDER'] = RAGConfig.UPLOAD_DIR  # chatbot/uploads
+        app.config['MAX_FILE_SIZE'] = 16 * 1024 * 1024
+        app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+        
+        logger.info(f"Upload folder configured: {app.config['UPLOAD_FOLDER']}")
+        logger.info(f"Data folder: {RAGConfig.DATA_DIR}")
+        logger.info(f"Cache folder: {RAGConfig.CACHE_DIR}")
         
         # Initialize database manager
         try:
@@ -311,11 +339,11 @@ def create_combined_app():
     app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
     
     # RAG system configuration
-    app.config['ALLOWED_EXTENSIONS'] = {'pdf'}
-    app.config['UPLOAD_FOLDER'] = 'uploads'
-    app.config['MAX_FILE_SIZE'] = 16 * 1024 * 1024
+    # app.config['ALLOWED_EXTENSIONS'] = {'pdf'}
+    # app.config['UPLOAD_FOLDER'] = 'uploads'
+    # app.config['MAX_FILE_SIZE'] = 16 * 1024 * 1024
     
-    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+    # os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
     # Load systems
     logger.info("Loading Application Systems")

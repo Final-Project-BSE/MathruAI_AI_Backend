@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv
 import base64
+from pathlib import Path
 
 # Load environment variables
 load_dotenv()
@@ -10,10 +11,11 @@ class Config:
     SECRET_KEY = os.getenv('SECRET_KEY', 'secret-key-here')
     DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
     PORT = int(os.getenv('PORT', 5000))
+    BASE_DIR = Path(__file__).resolve().parent
     
     # File upload settings
-    UPLOAD_FOLDER = 'uploads'
-    VECTOR_DB_PATH = 'vector_db'
+    UPLOAD_FOLDER = str(BASE_DIR / 'uploads')
+    VECTOR_DB_PATH = str(BASE_DIR / 'vector_db')
     ALLOWED_EXTENSIONS = {'pdf'}
     MAX_FILE_SIZE = 16 * 1024 * 1024  # 16MB
     

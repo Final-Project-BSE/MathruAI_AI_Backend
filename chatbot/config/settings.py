@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+CHATBOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 
 class DatabaseConfig:
     """Database configuration settings."""
@@ -44,10 +46,13 @@ class RAGConfig:
     SIMILARITY_THRESHOLD: float = float(os.getenv('SIMILARITY_THRESHOLD', '0.1'))
     
     # File paths
-    DATA_DIR: str = os.getenv('DATA_DIR', 'data')
-    CACHE_DIR: str = os.path.join(DATA_DIR, 'cache')
-    RAW_DATA_DIR: str = os.path.join(DATA_DIR, 'raw')
-    PROCESSED_DATA_DIR: str = os.path.join(DATA_DIR, 'processed')
+    BASE_DIR: str = CHATBOT_DIR
+    DATA_DIR: str = os.path.join(CHATBOT_DIR, 'data')
+    CACHE_DIR: str = os.path.join(CHATBOT_DIR, 'data', 'cache')
+    RAW_DATA_DIR: str = os.path.join(CHATBOT_DIR, 'data', 'raw')
+    PROCESSED_DATA_DIR: str = os.path.join(CHATBOT_DIR, 'data', 'processed')
+    UPLOAD_DIR: str = os.path.join(CHATBOT_DIR, 'uploads')
+    LOGS_DIR: str = os.path.join(CHATBOT_DIR, 'logs')
     
     # Knowledge base files
     KB_FILE: str = os.path.join(CACHE_DIR, 'knowledge_base.pkl')
@@ -66,15 +71,25 @@ class APIConfig:
 
 
 def validate_config():
-    """Validate that required configuration is present."""
+    """Validate that required configuration is present and create directories."""
     if not RAGConfig.GROQ_API_KEY:
         raise ValueError("GROQ_API_KEY is required but not found in environment variables")
     
-    # Create directories if they don't exist
-    os.makedirs(RAGConfig.DATA_DIR, exist_ok=True)
-    os.makedirs(RAGConfig.CACHE_DIR, exist_ok=True)
-    os.makedirs(RAGConfig.RAW_DATA_DIR, exist_ok=True)
-    os.makedirs(RAGConfig.PROCESSED_DATA_DIR, exist_ok=True)
+    # Create all directories in chatbot folder
+    directories = [
+        RAGConfig.DATA_DIR,
+        RAGConfig.CACHE_DIR,
+        RAGConfig.RAW_DATA_DIR,
+        RAGConfig.PROCESSED_DATA_DIR,
+        RAGConfig.UPLOAD_DIR,
+        RAGConfig.LOGS_DIR
+    ]
+    
+    print(f"\n📁 Creating directories in: {CHATBOT_DIR}")
+    for directory in directories:
+        os.makedirs(directory, exist_ok=True)
+        print(f"   ✓ {os.path.relpath(directory, CHATBOT_DIR)}")
+    print()
 
 
 # Validate configuration on import
