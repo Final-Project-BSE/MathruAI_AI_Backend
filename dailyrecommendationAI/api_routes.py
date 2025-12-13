@@ -49,7 +49,7 @@ def upload_pdf():
         success = rag_system.process_pdf(file_path, filename)
         
         # Clean up
-        os.remove(file_path)
+        # os.remove(file_path)
         
         if success:
             return jsonify({

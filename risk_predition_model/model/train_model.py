@@ -8,9 +8,15 @@ from sklearn.metrics import classification_report, accuracy_score, confusion_mat
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.multioutput import MultiOutputClassifier
 import joblib
+from pathlib import Path
+
 
 # Import the preprocessor from the model directory
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+CURRENT_FILE = Path(__file__).resolve()
+PROJECT_ROOT = CURRENT_FILE.parents[2]   # .../MathruAI_AI_Backend
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+    
 from risk_predition_model.utils.data_preprocessing import DataPreprocessor
 
 class MaternalRiskAdviceModel:
@@ -139,30 +145,34 @@ class MaternalRiskAdviceModel:
         
         return self.model, risk_accuracy, advice_accuracy
     
-    def save_model(self, model_path='model/maternal_risk_advice_model.pkl'):
-        """Save the trained model and preprocessor"""
-        os.makedirs(os.path.dirname(model_path), exist_ok=True)
-        
+    def save_model(self, filename="maternal_risk_advice_model.pkl"):
+        """Save the trained model and preprocessor inside risk_predition_model/model"""
+        pkg_dir = CURRENT_FILE.parents[1]      # .../risk_predition_model
+        model_dir = pkg_dir / "model"          # .../risk_predition_model/model
+        model_dir.mkdir(parents=True, exist_ok=True)
+
+        model_path = model_dir / filename      # ALWAYS inside model_dir
+
         model_data = {
-            'model': self.model,
-            'preprocessor': self.preprocessor,
-            'risk_levels': self.risk_levels,
-            'health_advice_options': self.health_advice_options
+            "model": self.model,
+            "preprocessor": self.preprocessor,
+            "risk_levels": self.risk_levels,
+            "health_advice_options": self.health_advice_options
         }
-        
-        joblib.dump(model_data, model_path)
+
+        joblib.dump(model_data, str(model_path))
         print(f"\nModel saved to {model_path}")
-        
-        # Save feature importance as CSV for reference
-        if hasattr(self.model, 'estimators_'):
+
+        # Save feature importance CSV beside the pkl
+        if hasattr(self.model, "estimators_") and hasattr(self.preprocessor, "feature_columns"):
             feature_importance = pd.DataFrame({
-                'feature': self.preprocessor.feature_columns,
-                'risk_importance': self.model.estimators_[0].feature_importances_,
-                'advice_importance': self.model.estimators_[1].feature_importances_
-            }).sort_values('risk_importance', ascending=False)
-            
-            importance_path = model_path.replace('.pkl', '_feature_importance.csv')
-            feature_importance.to_csv(importance_path, index=False)
+                "feature": self.preprocessor.feature_columns,
+                "risk_importance": self.model.estimators_[0].feature_importances_,
+                "advice_importance": self.model.estimators_[1].feature_importances_
+            }).sort_values("risk_importance", ascending=False)
+
+            importance_path = model_dir / (Path(filename).stem + "_feature_importance.csv")
+            feature_importance.to_csv(str(importance_path), index=False)
             print(f"Feature importance saved to {importance_path}")
 
 def main():
@@ -171,7 +181,8 @@ def main():
     maternal_model = MaternalRiskAdviceModel()
     
     # Check if data files exist
-    data_files = ['data/dataset_cleaned.csv']
+    PKG_DIR = CURRENT_FILE.parents[1]  # .../risk_predition_model
+    data_files = [str(PKG_DIR / 'data' / 'dataset_cleaned.csv')]
     
     missing_files = [f for f in data_files if not os.path.exists(f)]
     if missing_files:

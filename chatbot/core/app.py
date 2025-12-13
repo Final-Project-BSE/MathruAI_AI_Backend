@@ -12,6 +12,25 @@ from chatbot.core.rag_system import VectorRAGSystem
 from chatbot.utils.response_utils import create_error_response
 from chatbot.config.settings import RAGConfig
 
+# Get chatbot directory path
+CHATBOT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Configure logging to use chatbot/logs directory
+log_file = os.path.join(CHATBOT_DIR, 'logs', 'app.log')
+os.makedirs(os.path.dirname(log_file), exist_ok=True)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file),
+        logging.StreamHandler()
+    ]
+)
+
+logger = logging.getLogger(__name__)
+logger.info(f"Chatbot directory: {CHATBOT_DIR}")
+logger.info(f"Log file: {log_file}")
 
 def create_app():
     """
@@ -26,13 +45,14 @@ def create_app():
     CORS(app, origins=['*'])  # Configure more specifically in production
     
     # Application configuration
-    app.config['UPLOAD_FOLDER'] = 'data/uploads'
-    app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
     app.config['ALLOWED_EXTENSIONS'] = {'pdf'}
+    app.config['UPLOAD_FOLDER'] = RAGConfig.UPLOAD_DIR  # chatbot/uploads
+    app.config['MAX_FILE_SIZE'] = 16 * 1024 * 1024  # 16MB
+    app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
     
-    # Create directories
+    # Create upload directory if it doesn't exist (already done by RAGConfig)
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-    os.makedirs('logs', exist_ok=True)
+    logger.info(f"Upload folder: {app.config['UPLOAD_FOLDER']}")
     
     # Configure logging
     setup_logging()
