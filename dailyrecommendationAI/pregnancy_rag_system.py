@@ -136,7 +136,10 @@ class PregnancyRAGSystem:
             
             # Check if recommendation already exists for today
             today = datetime.now().date()
-            
+            if force_regenerate:
+                self.database_manager.delete_recommendation_for_date(user_id, today)
+                self.database_manager.delete_checklist_for_date(user_id, today)
+                
             if not force_regenerate:
                 existing_rec = self.database_manager.get_recommendation_for_date(user_id, today)
                 if existing_rec:
