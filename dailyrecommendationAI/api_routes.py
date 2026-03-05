@@ -217,22 +217,100 @@ def get_user_data_history(user_id):
 @api.route('/recommendation/<int:user_id>', methods=['GET'])
 @token_required
 def get_recommendation(user_id):
-    """Get daily recommendation for user"""
+    """
+    ✅ Now returns:
+    - recommendation text
+    - date
+    - regenerated
+    - checklist (saved item completion)
+    """
     try:
         force_regenerate = request.args.get('force_regenerate', 'false').lower() == 'true'
-        
         recommendation = rag_system.get_daily_recommendation(user_id, force_regenerate=force_regenerate)
-        
+
+        today = datetime.now().date()
+        checklist = rag_system.database_manager.get_checklist_items(user_id, today)
+        # normalize
+        checklist_out = [
+            {"id": r["item_id"], "text": r["item_text"], "completed": bool(r["completed"])}
+            for r in checklist
+        ]
+
         return jsonify({
             'user_id': user_id,
-            'date': datetime.now().strftime('%Y-%m-%d'),
+            'date': today.strftime('%Y-%m-%d'),
             'recommendation': recommendation,
             'regenerated': force_regenerate,
+            'checklist': checklist_out,
             'requested_by': request.user_email
         })
-        
+
     except Exception as e:
         logger.error(f"Get recommendation error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@api.route('/recommendation/<int:user_id>/checklist', methods=['PUT'])
+@token_required
+def save_checklist(user_id):
+    """
+    Body:
+    {
+      "date": "YYYY-MM-DD",
+      "items": [{ "id": "...", "text": "...", "completed": true }]
+    }
+    """
+    try:
+        data = request.get_json() or {}
+        date_str = data.get("date")
+        items = data.get("items", [])
+
+        if not date_str:
+            return jsonify({"error": "date is required"}), 400
+
+        try:
+            rec_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except Exception:
+            return jsonify({"error": "invalid date format. expected YYYY-MM-DD"}), 400
+
+        if not isinstance(items, list):
+            return jsonify({"error": "items must be a list"}), 400
+
+        ok = rag_system.database_manager.upsert_checklist_items(user_id, rec_date, items)
+        if not ok:
+            return jsonify({"error": "failed to save checklist"}), 500
+
+        return jsonify({
+            "message": "Checklist saved",
+            "user_id": user_id,
+            "date": date_str,
+            "saved_count": len(items)
+        })
+
+    except Exception as e:
+        logger.error(f"save_checklist error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@api.route('/recommendations/history/<int:user_id>', methods=['GET'])
+@token_required
+def get_recommendation_history(user_id):
+    """
+    ✅ Now includes checklist per day.
+    """
+    try:
+        limit = request.args.get('limit', 30, type=int)
+        if limit < 1 or limit > 100:
+            limit = 30
+
+        recommendations = rag_system.database_manager.get_recommendation_history_with_checklist(user_id, limit)
+
+        return jsonify({
+            'user_id': user_id,
+            'recommendations_count': len(recommendations),
+            'recommendations': recommendations
+        })
+
+    except Exception as e:
+        logger.error(f"Get recommendation history error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @api.route('/search', methods=['POST'])
@@ -273,38 +351,38 @@ def search_knowledge_base():
         logger.error(f"Search error: {e}")
         return jsonify({'error': str(e)}), 500
 
-@api.route('/recommendations/history/<int:user_id>', methods=['GET'])
-@token_required
-def get_recommendation_history(user_id):
-    """Get recommendation history"""
-    try:
-        if not rag_system.database_manager.is_connected():
-            return jsonify({'error': 'Database connection not available'}), 500
+# @api.route('/recommendations/history/<int:user_id>', methods=['GET'])
+# @token_required
+# def get_recommendation_history(user_id):
+#     """Get recommendation history"""
+#     try:
+#         if not rag_system.database_manager.is_connected():
+#             return jsonify({'error': 'Database connection not available'}), 500
         
-        # Get limit parameter
-        limit = request.args.get('limit', 30, type=int)
-        if limit < 1 or limit > 100:
-            limit = 30
+#         # Get limit parameter
+#         limit = request.args.get('limit', 30, type=int)
+#         if limit < 1 or limit > 100:
+#             limit = 30
         
-        recommendations = rag_system.get_recommendation_history(user_id, limit)
+#         recommendations = rag_system.get_recommendation_history(user_id, limit)
         
-        formatted_recommendations = []
-        for rec in recommendations:
-            formatted_recommendations.append({
-                'date': rec['recommendation_date'].isoformat() if rec.get('recommendation_date') else None,
-                'recommendation': rec['recommendation'],
-                'created_at': rec['created_at'].isoformat() if rec.get('created_at') else None
-            })
+#         formatted_recommendations = []
+#         for rec in recommendations:
+#             formatted_recommendations.append({
+#                 'date': rec['recommendation_date'].isoformat() if rec.get('recommendation_date') else None,
+#                 'recommendation': rec['recommendation'],
+#                 'created_at': rec['created_at'].isoformat() if rec.get('created_at') else None
+#             })
         
-        return jsonify({
-            'user_id': user_id,
-            'recommendations_count': len(formatted_recommendations),
-            'recommendations': formatted_recommendations
-        })
+#         return jsonify({
+#             'user_id': user_id,
+#             'recommendations_count': len(formatted_recommendations),
+#             'recommendations': formatted_recommendations
+#         })
         
-    except Exception as e:
-        logger.error(f"Get recommendation history error: {e}")
-        return jsonify({'error': str(e)}), 500
+#     except Exception as e:
+#         logger.error(f"Get recommendation history error: {e}")
+#         return jsonify({'error': str(e)}), 500
 
 @api.route('/debug/recommendation/<int:user_id>', methods=['GET'])
 @token_required
@@ -344,32 +422,28 @@ def test_auth():
         'token_payload': request.token_payload
     })
 
-# Add this to your api_routes.py
 @api.route('/auth/me', methods=['GET'])
 @token_required
 def get_current_user():
     """Get current authenticated user info"""
     try:
-        # Extract email from token
         email = request.user_email
-        
         if not email:
             return jsonify({'error': 'Could not extract user email from token'}), 400
-        
-        # Find user by email in database
-        cursor = rag_system.database_manager.connection.cursor(dictionary=True)
-        cursor.execute("SELECT id, first_name, email FROM users WHERE email = %s", (email,))
-        user = cursor.fetchone()
-        
+
+        if not rag_system.database_manager.is_connected():
+            return jsonify({'error': 'Database connection not available'}), 500
+
+        user = rag_system.database_manager.get_user_by_email(email)
         if not user:
             return jsonify({'error': 'User not found'}), 404
-        
+
         return jsonify({
             'user_id': user['id'],
             'name': user['first_name'],
             'email': user['email']
         })
-        
+
     except Exception as e:
         logger.error(f"Get current user error: {e}")
         return jsonify({'error': str(e)}), 500
