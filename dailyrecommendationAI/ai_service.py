@@ -28,7 +28,7 @@ class AIService:
         name = user_data.get('name', 'User')
         preferences = user_data.get('preferences', '').lower()
 
-        # Basic recommendations based on pregnancy trimester
+        # Basic recommendations
         if week <= 12:  # First trimester
             base_rec = f"Hi {name}! Focus on taking prenatal vitamins with folic acid, stay hydrated, and get plenty of rest during this important early stage."
         elif week <= 28:  # Second trimester
@@ -36,7 +36,7 @@ class AIService:
         else:  # Third trimester
             base_rec = f"Hi {name}! Focus on preparing for birth, practice breathing exercises, and ensure adequate calcium and iron intake."
 
-        # Add preference-based advice
+        # preference-based advice
         if 'vegetarian' in preferences:
             base_rec += " Make sure to get enough protein from legumes, nuts, and dairy."
         if 'yoga' in preferences:

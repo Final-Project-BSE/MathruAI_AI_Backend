@@ -9,8 +9,6 @@ logger = logging.getLogger(__name__)
 
 class DatabaseManager:
     def __init__(self):
-        # Do NOT keep a long-lived shared connection in Flask apps.
-        # We'll initialize tables once at startup.
         self.init_database()
 
     def _get_connection(self):
@@ -109,7 +107,7 @@ class DatabaseManager:
                 pass
             return False
 
-    # ✅ NEW: fetch checklist items for a day
+    # fetch checklist items for a day
     def get_checklist_items(self, user_id: int, rec_date: date) -> List[Dict]:
         try:
             conn = self._get_connection()
@@ -131,7 +129,7 @@ class DatabaseManager:
             logger.error(f"get_checklist_items error: {e}")
             return []
 
-    # ✅ NEW: include checklist in history
+    # include checklist in history
     def get_recommendation_history_with_checklist(self, user_id: int, limit: int = 30) -> List[Dict]:
         try:
             conn = self._get_connection()
@@ -151,7 +149,6 @@ class DatabaseManager:
 
             checklist_by_date = {}
             if dates:
-                # Build IN clause safely
                 placeholders = ",".join(["%s"] * len(dates))
                 cursor.execute(f"""
                     SELECT recommendation_date, item_id, item_text, completed

@@ -22,7 +22,7 @@ class RiskAdvicePredictor:
             # Preprocess input data
             processed_data = self.preprocessor.preprocess_single_input(input_data)
             
-            # Make predictions (multi-output)
+            # Make predictions
             predictions = self.model.predict(processed_data)
             risk_prediction = predictions[0][0]  # First output: risk level
             advice_prediction = predictions[0][1]  # Second output: health advice
@@ -46,7 +46,7 @@ class RiskAdvicePredictor:
             advice_confidence = float(advice_probabilities[advice_prediction]) if advice_prediction < len(advice_probabilities) else 0.0
             
             # Get top 3 most likely advice options
-            top_advice_indices = np.argsort(advice_probabilities)[-3:][::-1]  # Top 3 in descending order
+            top_advice_indices = np.argsort(advice_probabilities)[-3:][::-1]
             top_advice_options = []
             for idx in top_advice_indices:
                 if idx < len(self.health_advice_options):
@@ -159,7 +159,7 @@ class RiskAdvicePredictor:
             'total_advice_options': len(self.health_advice_options),
             'feature_count': len(self.preprocessor.feature_columns),
             'features': self.preprocessor.feature_columns,
-            'sample_advice_options': self.health_advice_options[:10]  # Show first 10 advice options
+            'sample_advice_options': self.health_advice_options[:10]
         }
 
 # Compatibility class for existing code
@@ -172,13 +172,12 @@ class RiskPredictor(RiskAdvicePredictor):
         """Predict risk (backward compatibility method)"""
         result = self.predict_risk_and_advice(input_data)
         
-        # Return format compatible with old API
         return {
             'risk_level': result.get('risk_level'),
             'confidence': result.get('risk_confidence', 0.0),
             'all_probabilities': result.get('risk_probabilities', {}),
             'features_used': result.get('features_used', []),
-            'health_advice': result.get('health_advice'),  # Added advice
-            'advice_confidence': result.get('advice_confidence', 0.0),  # Added advice confidence
-            'input_summary': result.get('input_summary', {})  # Added input summary
+            'health_advice': result.get('health_advice'),
+            'advice_confidence': result.get('advice_confidence', 0.0),
+            'input_summary': result.get('input_summary', {})
         }

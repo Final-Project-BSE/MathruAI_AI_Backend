@@ -42,7 +42,7 @@ class JWTAuth:
             if exp and datetime.fromtimestamp(exp) < datetime.now():
                 return None, "Token has expired"
             
-            # Extract email from 'sub' claim (Spring Boot uses subject for email)
+            # Extract email from 'sub' claim
             email = payload.get('sub')
             if not email:
                 return None, "Invalid token payload"
@@ -68,7 +68,7 @@ class JWTAuth:
         if not auth_header:
             return None
         
-        # Expected format: "Bearer <token>"
+        # format: "Bearer <token>"
         parts = auth_header.split()
         if len(parts) != 2 or parts[0].lower() != 'bearer':
             return None

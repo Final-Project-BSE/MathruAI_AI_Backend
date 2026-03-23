@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 import base64
 from pathlib import Path
 
-# Load environment variables
+# Load env
 load_dotenv()
 
 class Config:
@@ -19,7 +19,7 @@ class Config:
     ALLOWED_EXTENSIONS = {'pdf'}
     MAX_FILE_SIZE = 16 * 1024 * 1024  # 16MB
     
-    # JWT Authentication
+    # JWT Auth
     JWT_SECRET_BASE64 = os.getenv('JWT_SECRET', 'U2VjdXJlSldUS2V5MTIzITIzITIzIUxvbmdFbm91hfshfjshfZ2gadsd')
     
     # Decode the base64 secret to match Spring Boot's configuration
@@ -34,7 +34,7 @@ class Config:
     JWT_VERIFY_MODE = os.getenv('JWT_VERIFY_MODE', 'local')
     
     # JWT expiration
-    JWT_EXPIRATION_MS = int(os.getenv('JWT_EXPIRATION_MS', 604800000))  # 7 days default
+    JWT_EXPIRATION_MS = int(os.getenv('JWT_EXPIRATION_MS', 604800000))  # 7 days
     
     # API settings
     GROQ_API_KEY = os.getenv('GROQ_API_KEY')

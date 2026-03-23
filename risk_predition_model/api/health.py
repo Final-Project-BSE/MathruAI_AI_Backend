@@ -7,13 +7,12 @@ import logging
 health_bp = Blueprint('health', __name__)
 logger = logging.getLogger(__name__)
 
-print("✓ Health blueprint created")
+print("Health blueprint created")
 
 
 @health_bp.route('/', methods=['GET'])
 def health_check():
     """Health check endpoint"""
-    # Try to check if predictor can be loaded
     model_loaded = False
     try:
         from risk_predition_model.model.predict import RiskAdvicePredictor
@@ -28,10 +27,10 @@ def health_check():
         'model_loaded': model_loaded,
         'api_version': '2.0',
         'endpoints': {
-            'POST /api/predict/store': 'Store new prediction (JWT required)',
-            'GET /api/predict/latest': 'Get latest prediction (JWT required)',
-            'GET /api/predict/history': 'Get prediction history (JWT required)',
-            'GET /api/predict/user/<id>/latest': 'Get user latest prediction (JWT required)',
+            'POST /api/predict/store': 'Store new prediction',
+            'GET /api/predict/latest': 'Get latest prediction',
+            'GET /api/predict/history': 'Get prediction history',
+            'GET /api/predict/user/<id>/latest': 'Get user latest prediction',
             'GET /maternal/': 'Health check',
             'GET /maternal/health': 'Health check'
         }
@@ -51,7 +50,6 @@ def model_info():
         from risk_predition_model.model.predict import RiskAdvicePredictor
         predictor = RiskAdvicePredictor()
         
-        # Try to get model info if the method exists
         try:
             model_info_data = predictor.get_model_info()
             feature_importance = predictor.get_feature_importance()
@@ -71,7 +69,6 @@ def model_info():
                 }
             })
         except AttributeError:
-            # Methods don't exist, return basic info
             return jsonify({
                 'status': 'success',
                 'message': 'Model loaded but info methods not available',

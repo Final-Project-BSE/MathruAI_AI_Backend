@@ -9,7 +9,7 @@ from dailyrecommendationAI.jwt_auth import token_required, optional_token, jwt_a
 
 logger = logging.getLogger(__name__)
 
-# Create blueprint for API routes
+# Create blueprint for Api
 api = Blueprint('api', __name__)
 
 # Initialize RAG system
@@ -218,7 +218,7 @@ def get_user_data_history(user_id):
 @token_required
 def get_recommendation(user_id):
     """
-    ✅ Now returns:
+    returns:
     - recommendation text
     - date
     - regenerated
@@ -294,7 +294,7 @@ def save_checklist(user_id):
 @token_required
 def get_recommendation_history(user_id):
     """
-    ✅ Now includes checklist per day.
+    includes checklist per day.
     """
     try:
         limit = request.args.get('limit', 30, type=int)
@@ -411,7 +411,7 @@ def get_stats():
         logger.error(f"Get stats error: {e}")
         return jsonify({'error': str(e)}), 500
 
-# Authentication test endpoint
+# Authentication test
 @api.route('/auth/test', methods=['GET'])
 @token_required
 def test_auth():

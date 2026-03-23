@@ -4,7 +4,7 @@ import logging
 from dailyrecommendationAI.config import Config
 from dailyrecommendationAI.api_routes import api
 
-# Configure logging
+# logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'

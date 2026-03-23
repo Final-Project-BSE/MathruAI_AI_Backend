@@ -1,5 +1,3 @@
-# debug_model.py - Run this to diagnose the model loading issue
-
 import os
 import sys
 import traceback

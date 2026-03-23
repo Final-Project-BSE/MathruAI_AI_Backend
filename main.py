@@ -20,21 +20,27 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Configure logging to use chatbot/logs directory
-chatbot_log_dir = os.path.join(project_root, 'chatbot', 'logs')
-os.makedirs(chatbot_log_dir, exist_ok=True)
+# chatbot_log_dir = os.path.join(project_root, 'chatbot', 'logs')
+# os.makedirs(chatbot_log_dir, exist_ok=True)
+
+# logging.basicConfig(
+#     level=logging.INFO,
+#     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+#     handlers=[
+#         logging.FileHandler(os.path.join(chatbot_log_dir, 'app.log')),
+#         logging.StreamHandler()
+#     ]
+# )
 
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(os.path.join(chatbot_log_dir, 'app.log')),
-        logging.StreamHandler()
-    ]
+    handlers=[logging.StreamHandler()]
 )
 
 logger = logging.getLogger(__name__)
 logger.info(f"Project root: {project_root}")
-logger.info(f"Chatbot logs: {chatbot_log_dir}")
+# logger.info(f"Chatbot logs: {chatbot_log_dir}")
 
 
 def auto_setup_mysql():
@@ -229,7 +235,7 @@ def load_maternal_system(app):
         logger.info("Loading maternal risk prediction system...")
         logger.info(f"Python path includes: {sys.path[0]}")
         
-        # Try to import blueprints with detailed error handling
+        # import blueprints with detailed error handling
         try:
             logger.info("Attempting to import prediction blueprint...")
             from risk_predition_model.api.prediction import prediction_bp
@@ -262,7 +268,7 @@ def load_maternal_system(app):
         for route in maternal_routes[:5]:  # Show first 5
             logger.info(f"  - {route}")
         
-        # Try to initialize database (optional)
+        # initialize database
         try:
             from risk_predition_model.model.database import get_db_manager
             db_manager = get_db_manager()

@@ -21,9 +21,9 @@ def create_app():
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'U2VjdXJlSldUS2V5MTIzITIzITIzIUxvbmdFbm91hfshfjshfZ2gadsd')
     app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
     
-    # CORS - Allow credentials for JWT
+    # CORS
     CORS(app, 
-         origins=["http://localhost:3000", "http://localhost:8080"],  # Add your frontend URLs
+         origins=["http://localhost:3000", "http://localhost:8080"],
          methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
          allow_headers=["Content-Type", "Authorization"],
          supports_credentials=True)
@@ -53,7 +53,7 @@ def create_app():
     except Exception as e:
         logger.error(f"Blueprint registration error: {e}")
     
-    # Health check (No authentication required)
+    # Health check
     @app.route('/health', methods=['GET'])
     def health_check():
         return jsonify({

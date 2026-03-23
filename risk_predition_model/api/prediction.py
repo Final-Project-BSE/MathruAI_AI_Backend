@@ -40,7 +40,7 @@ def validate_input_data(data):
 @prediction_bp.route('/store', methods=['POST'])
 @token_required
 def store_prediction():
-    """Store new prediction - PROTECTED ROUTE"""
+    """Store new prediction"""
     try:
         data = request.get_json(force=True)
 
@@ -82,7 +82,6 @@ def store_prediction():
                 "error": "Failed to create user"
             }), 500
 
-        # ✅ inner try is now properly nested
         try:
             from risk_predition_model.model.predict import RiskAdvicePredictor
             predictor = RiskAdvicePredictor()
@@ -149,7 +148,7 @@ def store_prediction():
 @prediction_bp.route('/update/<int:prediction_id>', methods=['PUT'])
 @token_required
 def update_prediction(prediction_id):
-    """Update existing prediction - PROTECTED ROUTE"""
+    """Update existing prediction"""
     try:
         data = request.get_json(force=True)
 
@@ -261,7 +260,7 @@ def update_prediction(prediction_id):
 @prediction_bp.route('/get/<int:prediction_id>', methods=['GET'])
 @token_required
 def get_prediction(prediction_id):
-    """Get a specific prediction - PROTECTED ROUTE"""
+    """Get a specific prediction"""
     try:
         email = request.user_email
 
@@ -299,7 +298,7 @@ def get_prediction(prediction_id):
 @prediction_bp.route('/latest', methods=['GET'])
 @token_required
 def get_latest():
-    """Get latest prediction for authenticated user - PROTECTED ROUTE"""
+    """Get latest prediction for authenticated user"""
     try:
         email = request.user_email
 
@@ -337,7 +336,7 @@ def get_latest():
 @prediction_bp.route('/history', methods=['GET'])
 @token_required
 def get_history():
-    """Get prediction history for authenticated user - PROTECTED ROUTE"""
+    """Get prediction history for authenticated user"""
     try:
         email = request.user_email
         limit = request.args.get('limit', 10, type=int)
@@ -371,7 +370,7 @@ def get_history():
 @prediction_bp.route('/delete/<int:prediction_id>', methods=['DELETE'])
 @token_required
 def delete_prediction(prediction_id):
-    """Delete a prediction - PROTECTED ROUTE"""
+    """Delete a prediction"""
     try:
         email = request.user_email
 
@@ -406,11 +405,10 @@ def delete_prediction(prediction_id):
         }), 500
 
 
-# User-specific endpoints
 @prediction_bp.route('/user/<int:user_id>/predictions', methods=['GET'])
 @token_required
 def get_predictions_by_user_id(user_id):
-    """Get all predictions for a specific user ID - PROTECTED ROUTE"""
+    """Get all predictions for a specific user ID"""
     try:
         email = request.user_email
         limit = request.args.get('limit', 10, type=int)
@@ -451,7 +449,7 @@ def get_predictions_by_user_id(user_id):
 @prediction_bp.route('/user/<int:user_id>/latest', methods=['GET'])
 @token_required
 def get_latest_by_user_id(user_id):
-    """Get latest prediction for a specific user ID - PROTECTED ROUTE"""
+    """Get latest prediction for a specific user ID"""
     try:
         email = request.user_email
 
@@ -496,7 +494,7 @@ def get_latest_by_user_id(user_id):
 @prediction_bp.route('/user/<int:user_id>/prediction/<int:prediction_id>', methods=['GET'])
 @token_required
 def get_prediction_by_user_id(user_id, prediction_id):
-    """Get a specific prediction for a user ID - PROTECTED ROUTE"""
+    """Get a specific prediction for a user ID"""
     try:
         email = request.user_email
 
@@ -541,7 +539,7 @@ def get_prediction_by_user_id(user_id, prediction_id):
 @prediction_bp.route('/user/<int:user_id>/prediction/<int:prediction_id>', methods=['PUT'])
 @token_required
 def update_prediction_by_user_id(user_id, prediction_id):
-    """Update a prediction using user ID and prediction ID - PROTECTED ROUTE"""
+    """Update a prediction using user ID and prediction ID"""
     try:
         data = request.get_json(force=True)
 

@@ -130,7 +130,7 @@ class MaternalRiskAdviceModel:
         advice_sample = self.health_advice_options[:min(10, len(self.health_advice_options))]
         print(f"(Showing first {len(advice_sample)} advice categories)")
         
-        # Feature importance (from the first estimator for risk level)
+        # Feature importance
         feature_importance = pd.DataFrame({
             'feature': X.columns,
             'risk_importance': self.model.estimators_[0].feature_importances_,
