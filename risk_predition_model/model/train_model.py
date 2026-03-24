@@ -190,7 +190,6 @@ def main():
         print("Please ensure your CSV files are in the 'data' directory")
         return
     
-    # Modify these column names to match your dataset
     risk_level_column = 'RiskLevel'
     health_advice_column = 'HealthAdvice'
     

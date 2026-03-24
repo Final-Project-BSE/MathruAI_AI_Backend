@@ -1,60 +1,74 @@
-"""
-Main Flask Application for Pregnancy Risk Prediction with JWT Auth
-"""
 import os
 import logging
 from flask import Flask, jsonify
 from flask_cors import CORS
+from dotenv import load_dotenv
+
+load_dotenv()
+from risk_predition_model.config import get_config
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
+_predictor = None
+
+
+def get_predictor():
+    """Lazy-load and cache predictor instance."""
+    global _predictor
+    if _predictor is None:
+        from risk_predition_model.model.predict import RiskAdvicePredictor
+        _predictor = RiskAdvicePredictor()
+    return _predictor
+
 
 def create_app():
-    """Create and configure Flask app"""
+    """Create and configure Flask app."""
     app = Flask(__name__)
-    
-    # Configuration
-    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'U2VjdXJlSldUS2V5MTIzITIzITIzIUxvbmdFbm91hfshfjshfZ2gadsd')
-    app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
-    
-    # CORS
-    CORS(app, 
-         origins=["http://localhost:3000", "http://localhost:8080"],
-         methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-         allow_headers=["Content-Type", "Authorization"],
-         supports_credentials=True)
-    
+    config_class = get_config()
+    app.config.from_object(config_class)
+
+    CORS(
+        app,
+        origins=["http://localhost:3000", "http://localhost:8080"],
+        methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization"],
+        supports_credentials=True
+    )
+
     logger.info("Initializing database...")
     try:
         from risk_predition_model.model.database import get_db_manager
-        db_manager = get_db_manager()
-        logger.info("✓ Database initialized")
+        get_db_manager()
+        logger.info("Database initialized")
     except Exception as e:
         logger.error(f"Database initialization error: {e}")
-    
+
     logger.info("Loading prediction model...")
     try:
-        from risk_predition_model.model.predict import RiskAdvicePredictor
-        predictor = RiskAdvicePredictor()
-        logger.info("✓ Prediction model loaded")
+        get_predictor()
+        logger.info("Prediction model loaded")
     except Exception as e:
         logger.error(f"Model loading error: {e}")
-    
-    # Register blueprints
+
     logger.info("Registering blueprints...")
     try:
         from risk_predition_model.api.prediction import prediction_bp
-        app.register_blueprint(prediction_bp, url_prefix='/api/predict')
-        logger.info("✓ Prediction blueprint registered")
+        from risk_predition_model.api.health import health_bp
+        from risk_predition_model.api.model_info import model_info_bp
+
+        app.register_blueprint(prediction_bp, url_prefix="/api/predict")
+        app.register_blueprint(health_bp, url_prefix="/maternal")
+        app.register_blueprint(model_info_bp, url_prefix="/maternal")
+
+        logger.info("✓ Blueprints registered")
     except Exception as e:
         logger.error(f"Blueprint registration error: {e}")
-    
-    # Health check
-    @app.route('/health', methods=['GET'])
+
+    @app.route("/health", methods=["GET"])
     def health_check():
         return jsonify({
             "status": "healthy",
@@ -62,9 +76,8 @@ def create_app():
             "version": "1.0",
             "auth": "JWT enabled"
         }), 200
-    
-    # Root endpoint
-    @app.route('/', methods=['GET'])
+
+    @app.route("/", methods=["GET"])
     def index():
         return jsonify({
             "message": "Pregnancy Risk Prediction API",
@@ -81,8 +94,7 @@ def create_app():
             },
             "auth_header": "Authorization: Bearer <jwt_token>"
         }), 200
-    
-    # Error handlers
+
     @app.errorhandler(401)
     def unauthorized(error):
         return jsonify({
@@ -90,7 +102,7 @@ def create_app():
             "error": "Unauthorized",
             "message": "Valid authentication token required"
         }), 401
-    
+
     @app.errorhandler(403)
     def forbidden(error):
         return jsonify({
@@ -98,10 +110,14 @@ def create_app():
             "error": "Forbidden",
             "message": "You don't have permission to access this resource"
         }), 403
-    
+
     return app
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app = create_app()
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(
+        debug=os.environ.get("DEBUG", "False").lower() == "true",
+        host=os.environ.get("HOST", "0.0.0.0"),
+        port=int(os.environ.get("PORT", 5000))
+    )
