@@ -59,7 +59,7 @@ def build_input_data(data):
     return input_data
 
 
-def build_prediction_response(prediction_id, user_id, email, prediction_result, input_data, message):
+def build_prediction_response(prediction_id, user_id, email, prediction_result, input_data, message, updated_by_midwife_id=None):
     return {
         "status": "success",
         "message": message,
@@ -67,6 +67,7 @@ def build_prediction_response(prediction_id, user_id, email, prediction_result, 
             "prediction_id": prediction_id,
             "user_id": user_id,
             "email": email,
+            "updated_by_midwife_id": updated_by_midwife_id,
             "risk_assessment": {
                 "risk_level": prediction_result.get("risk_level"),
                 "confidence": prediction_result.get("risk_confidence"),

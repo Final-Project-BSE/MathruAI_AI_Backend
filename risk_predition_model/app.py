@@ -59,10 +59,12 @@ def create_app():
         from risk_predition_model.api.prediction import prediction_bp
         from risk_predition_model.api.health import health_bp
         from risk_predition_model.api.model_info import model_info_bp
+        from risk_predition_model.api.health_monitoring import health_monitoring_bp
 
         app.register_blueprint(prediction_bp, url_prefix="/api/predict")
         app.register_blueprint(health_bp, url_prefix="/maternal")
         app.register_blueprint(model_info_bp, url_prefix="/maternal")
+        app.register_blueprint(health_monitoring_bp, url_prefix="/api/monitoring")
 
         logger.info("✓ Blueprints registered")
     except Exception as e:
@@ -90,6 +92,8 @@ def create_app():
                 "GET /api/predict/history": "Get all predictions (AUTH REQUIRED)",
                 "PUT /api/predict/update/<id>": "Update prediction (AUTH REQUIRED)",
                 "DELETE /api/predict/delete/<id>": "Delete prediction (AUTH REQUIRED)",
+                "GET /api/monitoring/midwife/<midwife_id>/patient/<patient_id>/latest": "Get latest patient prediction for a managed patient (AUTH REQUIRED)",
+                "PUT /api/monitoring/midwife/<midwife_id>/patient/<patient_id>/prediction/<prediction_id>": "Update an existing patient prediction by midwife (AUTH REQUIRED)",
                 "GET /health": "Health check (No auth)"
             },
             "auth_header": "Authorization: Bearer <jwt_token>"

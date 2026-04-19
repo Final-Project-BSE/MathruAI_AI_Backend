@@ -32,6 +32,28 @@ class JWTAuth:
     """JWT Authentication Handler"""
 
     @staticmethod
+    def _extract_user_id(payload):
+        for key in ("userId", "user_id", "id"):
+            value = payload.get(key)
+            if value is not None and str(value).strip() != "":
+                return value
+        return None
+
+    @staticmethod
+    def _extract_roles(payload):
+        raw_roles = payload.get("roles") or payload.get("authorities") or payload.get("scope") or []
+        if isinstance(raw_roles, str):
+            if "," in raw_roles:
+                roles = [role.strip() for role in raw_roles.split(",") if role.strip()]
+            else:
+                roles = [role.strip() for role in raw_roles.split() if role.strip()]
+        elif isinstance(raw_roles, (list, tuple, set)):
+            roles = [str(role).strip() for role in raw_roles if str(role).strip()]
+        else:
+            roles = []
+        return roles
+
+    @staticmethod
     def decode_token(token):
         """Decode and validate JWT token"""
         try:
@@ -51,6 +73,8 @@ class JWTAuth:
 
             return {
                 "email": email,
+                "user_id": JWTAuth._extract_user_id(payload),
+                "roles": JWTAuth._extract_roles(payload),
                 "exp": exp,
                 "iat": payload.get("iat")
             }, None
@@ -108,6 +132,8 @@ def token_required(f):
 
         request.user_email = payload["email"]
         request.user_payload = payload
+        request.user_id = payload.get("user_id")
+        request.user_roles = payload.get("roles", [])
         return f(*args, **kwargs)
 
     return decorated
@@ -121,6 +147,8 @@ def optional_token(f):
 
         request.user_email = None
         request.user_payload = None
+        request.user_id = None
+        request.user_roles = []
 
         if auth_header:
             token = JWTAuth.extract_token_from_header(auth_header)
@@ -129,6 +157,8 @@ def optional_token(f):
                 if not error:
                     request.user_email = payload["email"]
                     request.user_payload = payload
+                    request.user_id = payload.get("user_id")
+                    request.user_roles = payload.get("roles", [])
 
         return f(*args, **kwargs)
 

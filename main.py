@@ -271,15 +271,14 @@ def load_rag_system(app: Flask) -> bool:
         traceback.print_exc()
         return False
 
-
 def load_maternal_system(app: Flask) -> bool:
     """Load maternal system with MySQL support."""
     try:
-        logger.info("Loading maternal risk prediction system...")
+        logger.info("Loading maternal risk prediction system.")
         logger.info("Python path includes: %s", sys.path[0])
 
         try:
-            logger.info("Attempting to import prediction blueprint...")
+            logger.info("Attempting to import prediction blueprint.")
             from risk_predition_model.api.prediction import prediction_bp
 
             logger.info("Prediction blueprint imported: %s", prediction_bp.name)
@@ -288,13 +287,25 @@ def load_maternal_system(app: Flask) -> bool:
             raise
 
         try:
-            logger.info("Attempting to import health blueprint...")
+            logger.info("Attempting to import health blueprint.")
             from risk_predition_model.api.health import health_bp
 
             logger.info("Health blueprint imported: %s", health_bp.name)
         except ImportError as exc:
             logger.error("Failed to import health blueprint: %s", exc)
             health_bp = None
+
+        try:
+            logger.info("Attempting to import health monitoring blueprint.")
+            from risk_predition_model.api.health_monitoring import health_monitoring_bp
+
+            logger.info(
+                "Health monitoring blueprint imported: %s",
+                health_monitoring_bp.name,
+            )
+        except ImportError as exc:
+            logger.error("Failed to import health monitoring blueprint: %s", exc)
+            health_monitoring_bp = None
 
         app.register_blueprint(prediction_bp, url_prefix="/api/predict")
         logger.info("Maternal prediction blueprint registered at /api/predict")
@@ -303,11 +314,23 @@ def load_maternal_system(app: Flask) -> bool:
             app.register_blueprint(health_bp, url_prefix="/maternal")
             logger.info("Maternal health blueprint registered at /maternal")
 
+        if health_monitoring_bp:
+            app.register_blueprint(
+                health_monitoring_bp, url_prefix="/api/health-monitoring"
+            )
+            logger.info(
+                "Health monitoring blueprint registered at /api/health-monitoring"
+            )
+
         maternal_routes = [
-            str(rule) for rule in app.url_map.iter_rules() if "/api/predict" in str(rule)
+            str(rule)
+            for rule in app.url_map.iter_rules()
+            if "/api/predict" in str(rule)
+            or "/maternal" in str(rule)
+            or "/api/health-monitoring" in str(rule)
         ]
-        logger.info("Registered %s prediction routes:", len(maternal_routes))
-        for route in maternal_routes[:5]:
+        logger.info("Registered %s maternal routes:", len(maternal_routes))
+        for route in maternal_routes[:20]:
             logger.info("  - %s", route)
 
         try:
@@ -324,6 +347,7 @@ def load_maternal_system(app: Flask) -> bool:
     except ImportError as exc:
         logger.error("Maternal Risk Prediction system not available - Import Error: %s", exc)
         logger.error("Check that risk_predition_model/api/prediction.py exists")
+        logger.error("Check that risk_predition_model/api/health_monitoring.py exists")
         logger.error("Check that auth/JWTauth.py or risk_predition_model/auth/JWTauth.py exists")
         traceback.print_exc()
         return False
@@ -331,7 +355,6 @@ def load_maternal_system(app: Flask) -> bool:
         logger.error("Error loading Maternal Risk Prediction system: %s", exc)
         traceback.print_exc()
         return False
-
 
 def load_pregnancy_rag_system(app: Flask) -> bool:
     """Load Pregnancy RAG system with proper error handling."""

@@ -60,6 +60,46 @@ class DatabaseManager:
         if self.connection is None or not self.connection.is_connected():
             self.connect()
 
+    def _column_exists(self, table_name: str, column_name: str) -> bool:
+        self._ensure_connection()
+        if not self.connection:
+            return False
+
+        try:
+            with closing(self.connection.cursor()) as cursor:
+                cursor.execute("""
+                    SELECT COUNT(*)
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_SCHEMA = %s
+                      AND TABLE_NAME = %s
+                      AND COLUMN_NAME = %s
+                """, (self.db_name, table_name, column_name))
+                result = cursor.fetchone()
+                return bool(result and result[0] > 0)
+        except Error as e:
+            logger.error(f"Error checking column existence for {table_name}.{column_name}: {e}")
+            return False
+
+    def _ensure_predictions_midwife_column(self):
+        if self._column_exists("predictions", "updated_by_midwife_id"):
+            return
+
+        try:
+            with closing(self.connection.cursor()) as cursor:
+                cursor.execute("""
+                    ALTER TABLE predictions
+                    ADD COLUMN updated_by_midwife_id BIGINT NULL AFTER user_id
+                """)
+                cursor.execute("""
+                    CREATE INDEX idx_predictions_updated_by_midwife
+                    ON predictions (updated_by_midwife_id)
+                """)
+            self.connection.commit()
+            logger.info("Added updated_by_midwife_id column to predictions table")
+        except Error as e:
+            logger.error(f"Error altering predictions table: {e}")
+            self.connection.rollback()
+
     def setup_tables(self):
         """Create necessary tables"""
         self._ensure_connection()
@@ -109,6 +149,7 @@ class DatabaseManager:
                 """)
 
             self.connection.commit()
+            self._ensure_predictions_midwife_column()
             logger.info("Database tables setup complete")
         except Error as e:
             logger.error(f"Error setting up tables: {e}")
@@ -147,14 +188,15 @@ class DatabaseManager:
             with closing(self.connection.cursor()) as cursor:
                 cursor.execute("""
                     INSERT INTO predictions
-                    (user_id, age, systolic_bp, diastolic_bp, blood_sugar, body_temp,
+                    (user_id, updated_by_midwife_id, age, systolic_bp, diastolic_bp, blood_sugar, body_temp,
                      bmi, heart_rate, previous_complications, preexisting_diabetes,
                      gestational_diabetes, mental_health, risk_level, risk_confidence,
                      health_advice, advice_confidence, risk_probabilities, patient_profile,
                      alternative_advice)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
                     user_id,
+                    None,
                     float(input_data.get("Age", 0)),
                     float(input_data.get("SystolicBP", 0)),
                     float(input_data.get("DiastolicBP", 0)),
@@ -183,7 +225,14 @@ class DatabaseManager:
             self.connection.rollback()
             return None
 
-    def update_prediction(self, user_id: int, prediction_id: int, input_data: Dict[str, Any], prediction_result: Dict[str, Any]) -> bool:
+    def update_prediction(
+        self,
+        user_id: int,
+        prediction_id: int,
+        input_data: Dict[str, Any],
+        prediction_result: Dict[str, Any],
+        updated_by_midwife_id: Optional[int] = None
+    ) -> bool:
         self._ensure_connection()
         if not self.connection:
             return False
@@ -192,17 +241,29 @@ class DatabaseManager:
             with closing(self.connection.cursor()) as cursor:
                 cursor.execute("""
                     UPDATE predictions
-                    SET age = %s, systolic_bp = %s, diastolic_bp = %s, blood_sugar = %s,
-                        body_temp = %s, bmi = %s, heart_rate = %s,
-                        previous_complications = %s, preexisting_diabetes = %s,
-                        gestational_diabetes = %s, mental_health = %s,
-                        risk_level = %s, risk_confidence = %s,
-                        health_advice = %s, advice_confidence = %s,
-                        risk_probabilities = %s, patient_profile = %s,
+                    SET age = %s,
+                        updated_by_midwife_id = %s,
+                        systolic_bp = %s,
+                        diastolic_bp = %s,
+                        blood_sugar = %s,
+                        body_temp = %s,
+                        bmi = %s,
+                        heart_rate = %s,
+                        previous_complications = %s,
+                        preexisting_diabetes = %s,
+                        gestational_diabetes = %s,
+                        mental_health = %s,
+                        risk_level = %s,
+                        risk_confidence = %s,
+                        health_advice = %s,
+                        advice_confidence = %s,
+                        risk_probabilities = %s,
+                        patient_profile = %s,
                         alternative_advice = %s
                     WHERE id = %s AND user_id = %s
                 """, (
                     float(input_data.get("Age", 0)),
+                    updated_by_midwife_id,
                     float(input_data.get("SystolicBP", 0)),
                     float(input_data.get("DiastolicBP", 0)),
                     float(input_data.get("BS", 0)),
@@ -260,7 +321,7 @@ class DatabaseManager:
                 cursor.execute("""
                     SELECT * FROM predictions
                     WHERE user_id = %s
-                    ORDER BY created_at DESC
+                    ORDER BY updated_at DESC, created_at DESC
                     LIMIT 1
                 """, (user_id,))
                 result = cursor.fetchone()
@@ -279,7 +340,7 @@ class DatabaseManager:
                 cursor.execute("""
                     SELECT * FROM predictions
                     WHERE user_id = %s
-                    ORDER BY created_at DESC
+                    ORDER BY updated_at DESC, created_at DESC
                     LIMIT %s
                 """, (user_id, limit))
                 results = cursor.fetchall()
@@ -287,6 +348,41 @@ class DatabaseManager:
         except Error as e:
             logger.error(f"Error getting predictions: {e}")
             return []
+
+    def has_patient_prediction(self, patient_id: int) -> bool:
+        self._ensure_connection()
+        if not self.connection:
+            return False
+
+        try:
+            with closing(self.connection.cursor()) as cursor:
+                cursor.execute(
+                    "SELECT 1 FROM predictions WHERE user_id = %s LIMIT 1",
+                    (patient_id,)
+                )
+                return cursor.fetchone() is not None
+        except Error as e:
+            logger.error(f"Error checking patient predictions: {e}")
+            return False
+
+    def is_patient_managed_by_midwife(self, patient_id: int, midwife_id: int) -> bool:
+        self._ensure_connection()
+        if not self.connection:
+            return False
+
+        try:
+            with closing(self.connection.cursor()) as cursor:
+                cursor.execute("""
+                    SELECT 1
+                    FROM predictions
+                    WHERE user_id = %s
+                      AND updated_by_midwife_id = %s
+                    LIMIT 1
+                """, (patient_id, midwife_id))
+                return cursor.fetchone() is not None
+        except Error as e:
+            logger.error(f"Error checking patient-midwife management relationship: {e}")
+            return False
 
     def delete_prediction(self, prediction_id: int, user_id: int) -> bool:
         self._ensure_connection()
@@ -322,6 +418,7 @@ class DatabaseManager:
         return {
             "id": raw_data["id"],
             "user_id": raw_data["user_id"],
+            "updated_by_midwife_id": raw_data.get("updated_by_midwife_id"),
             "vitals": {
                 "Age": raw_data["age"],
                 "SystolicBP": raw_data["systolic_bp"],
