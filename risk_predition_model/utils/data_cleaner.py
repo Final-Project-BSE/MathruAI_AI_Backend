@@ -17,7 +17,7 @@ def clean_maternal_risk_data(input_file, output_file):
     print(f"\nData description:")
     print(df.describe())
     
-    # Check for outliers in Age (325 seems like an error)
+    # Check for outliers in Age
     print(f"\nAge statistics:")
     print(f"Min Age: {df['Age'].min()}")
     print(f"Max Age: {df['Age'].max()}")

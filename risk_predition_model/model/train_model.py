@@ -130,7 +130,7 @@ class MaternalRiskAdviceModel:
         advice_sample = self.health_advice_options[:min(10, len(self.health_advice_options))]
         print(f"(Showing first {len(advice_sample)} advice categories)")
         
-        # Feature importance (from the first estimator for risk level)
+        # Feature importance
         feature_importance = pd.DataFrame({
             'feature': X.columns,
             'risk_importance': self.model.estimators_[0].feature_importances_,
@@ -190,7 +190,6 @@ def main():
         print("Please ensure your CSV files are in the 'data' directory")
         return
     
-    # Modify these column names to match your dataset
     risk_level_column = 'RiskLevel'
     health_advice_column = 'HealthAdvice'
     

@@ -10,7 +10,6 @@ from chatbot.config.settings import DatabaseConfig
 
 logger = logging.getLogger(__name__)
 
-
 class DatabaseManager:
     """Manages database connections"""
 
@@ -133,20 +132,6 @@ class DatabaseManager:
                 )
             """)
 
-            try:
-                cursor.execute("ALTER TABLE chat_sessions ADD COLUMN user_id VARCHAR(50) NOT NULL AFTER id")
-                cursor.execute("CREATE INDEX idx_user_id ON chat_sessions(user_id)")
-                logger.info("Added user_id column to chat_sessions")
-            except Error:
-                pass
-
-            try:
-                cursor.execute("ALTER TABLE chat_messages ADD COLUMN user_id VARCHAR(50) NOT NULL AFTER session_id")
-                cursor.execute("CREATE INDEX idx_user_id ON chat_messages(user_id)")
-                logger.info("Added user_id column to chat_messages")
-            except Error:
-                pass
-
             self.connection.commit()
             logger.info("Database tables setup complete with user support")
 
@@ -240,9 +225,7 @@ class DatabaseManager:
 
     def store_chunk(self, chunk_text: str, source_file: str, chunk_index: int,
                     embedding_vector_id: int, metadata: dict = None) -> int:
-        """
-        Store a document chunk with metadata and size tracking.
-        """
+        """ Store a document chunk with metadata and size tracking. """
         if not self.connection:
             return -1
 
@@ -277,9 +260,7 @@ class DatabaseManager:
             return -1
 
     def get_user_chat_sessions(self, user_id: str, limit: int = 50) -> List[Dict]:
-        """
-        Get list of chat sessions for a specific user.
-        """
+        """ Get list of chat sessions for a specific user. """
         if not self.connection:
             return []
 
@@ -306,9 +287,7 @@ class DatabaseManager:
             return []
 
     def get_session_owner(self, session_id: int) -> Optional[str]:
-        """
-        Get the owner (user_id) of a chat session.
-        """
+        """ Get the owner (user_id) of a chat session. """
         if not self.connection:
             return None
 
@@ -326,9 +305,7 @@ class DatabaseManager:
             return None
 
     def get_user_chat_messages(self, user_id: str, session_id: int) -> List[Dict]:
-        """
-        Get all messages for a user's chat session.
-        """
+        """ Get all messages for a user's chat session. """
         if not self.connection:
             return []
 
@@ -357,9 +334,7 @@ class DatabaseManager:
                            response: str = None, message_type: str = 'user',
                            response_time_ms: int = None, context_chunks_count: int = None,
                            similarity_threshold: float = None, top_k: int = None) -> int:
-        """
-        Store a chat message for a specific user.
-        """
+        """ Store a chat message for a specific user. """
         if not self.connection:
             return -1
 
@@ -388,9 +363,7 @@ class DatabaseManager:
             return -1
 
     def delete_user_chat_session(self, session_id: int, user_id: str) -> bool:
-        """
-        Delete a user's chat session (soft delete).
-        """
+        """ Delete a user's chat session (soft delete). """
         if not self.connection:
             return False
 
@@ -410,9 +383,7 @@ class DatabaseManager:
             return False
 
     def get_user_statistics(self, user_id: str, days: int = 7) -> Dict:
-        """
-        Get chat statistics for a specific user.
-        """
+        """ Get chat statistics for a specific user. """
         if not self.connection:
             return {}
 
@@ -453,9 +424,7 @@ class DatabaseManager:
     def log_search(self, query: str, response: str, chunks_count: int,
                    similarity_threshold: float, top_k: int, user_id: str = None,
                    response_time_ms: int = None, context_tokens: int = None):
-        """
-        Log search query and response with user tracking.
-        """
+        """ Log search query and response with user tracking. """
         if not self.connection:
             return
 
