@@ -30,6 +30,7 @@ To upload PDF documents for the pregnancy daily recommendation system, use:
 Run the following command to train the risk prediction model:
 
 - python -m risk_predition_model.model.train_model
+- python -m risk_predition_model.model.train_smote_risk_model
 
 
 ## Run the Complete System

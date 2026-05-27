@@ -1,6 +1,4 @@
-"""
-Main RAG system implementation with vector similarity search.
-"""
+""" Main RAG system implementation """
 import os
 import re
 import numpy as np
@@ -23,19 +21,8 @@ logger = logging.getLogger(__name__)
 
 
 class VectorRAGSystem:
-    """
-    Vector based Retrieval Augmented Generation system for pregnancy guidance.
-    """
-    
     def __init__(self, embedding_model: str = None, chunk_size: int = None, chunk_overlap: int = None):
-        """
-        Initialize the RAG system.
-        
-        Args:
-            embedding_model (str, optional): Name of embedding model to use
-            chunk_size (int, optional): Maximum chunk size
-            chunk_overlap (int, optional): Overlap between chunks
-        """
+        """ Initialize the RAG system. """
         # Validate configuration
         validate_config()
         
@@ -176,15 +163,7 @@ class VectorRAGSystem:
             raise
     
     def update_knowledge_base_from_pdf(self, pdf_path: str) -> bool:
-        """
-        Update the knowledge base with content from a PDF.
-        
-        Args:
-            pdf_path (str): Path to the PDF file
-            
-        Returns:
-            bool: True if successful, False otherwise
-        """
+        """ Update the knowledge base with content from a PDF. """
         try:
             content = extract_text_from_pdf(pdf_path)
             if not content:
@@ -261,12 +240,6 @@ class VectorRAGSystem:
     def find_relevant_context(self, query: str, top_k: int = None, similarity_threshold: float = None) -> str:
         """
         Find most relevant context using FAISS vector similarity.
-        
-        Args:
-            query (str): Search query
-            top_k (int, optional): Number of top results to retrieve
-            similarity_threshold (float, optional): Minimum similarity threshold
-            
         Returns:
             str: Relevant context text
         """
@@ -336,21 +309,48 @@ class VectorRAGSystem:
     
     def _get_system_prompt(self) -> str:
         """Get the system prompt for the LLM."""
-        return """You are a helpful pregnancy guidance assistant. Provide accurate, supportive, and safe information about pregnancy. Always recommend consulting healthcare providers for medical concerns. Be empathetic and understanding."""
-    
+        return """You are a helpful pregnancy guidance assistant.
+
+            Provide accurate, supportive, and safe information about pregnancy.
+
+            Formatting rules:
+            - Use valid Markdown only.
+            - Use short paragraphs.
+            - Leave exactly one blank line between paragraphs.
+            - When listing items, always use Markdown list syntax starting with '- '.
+            - For sub-items, also use Markdown list syntax.
+            - Do not write list items as plain text labels like 'Folate:' without a bullet.
+            - Use bold markdown for short section labels when helpful.
+
+            Always recommend consulting healthcare providers for medical concerns.
+            Be empathetic and understanding."""
+        
     def _create_user_prompt(self, query: str, context: str) -> str:
-        """Create user prompt with context and query."""
         if context:
             return f"""Context information:
-{context}
+                {context}
 
-Question: {query}
+                Question: {query}
 
-Please provide a helpful response based on the context above. If the context doesn't contain relevant information, provide general pregnancy guidance while emphasizing the importance of consulting healthcare providers."""
+                Answer using valid Markdown.
+
+                Rules:
+                - Use short paragraphs.
+                - Leave one blank line between paragraphs.
+                - If you provide multiple points, use Markdown bullets starting with '- '.
+                - Do not write plain lines that only look like list items.
+
+                Base the answer on the context when relevant."""
         else:
             return f"""Question: {query}
 
-Please provide helpful pregnancy guidance while emphasizing the importance of consulting healthcare providers for specific medical concerns."""
+                Answer using valid Markdown.
+
+                Rules:
+                - Use short paragraphs.
+                - Leave one blank line between paragraphs.
+                - If you provide multiple points, use Markdown bullets starting with '- '.
+                - Do not write plain lines that only look like list items."""
     
     def generate_response(self, query: str) -> str:
         """
@@ -422,15 +422,7 @@ Please provide helpful pregnancy guidance while emphasizing the importance of co
             return error_msg
     
     def generate_response_streaming(self, query: str) -> Generator[str, None, None]:
-        """
-        Generate streaming response for better user experience.
-        
-        Args:
-            query (str): User query
-            
-        Yields:
-            str: Response chunks
-        """
+        """ Generate streaming response for better user experience. """
         try:
             # Find relevant context
             context = self.find_relevant_context(query)
@@ -484,11 +476,35 @@ Please provide helpful pregnancy guidance while emphasizing the importance of co
             "database_connected": self.db_manager is not None and self.db_manager.connection is not None,
             "max_context_tokens": self.token_manager.max_context_tokens,
             "chunk_size": self.chunker.max_chunk_size,
-            "chunk_overlap": self.chunker.overlap_size
+            "chunk_overlap": self.chunker.overlap_size,
+            "unique_sources": 0,
+            "avg_chunk_size": 0
         }
-        
-        return base_stats
 
+        if not self.db_manager or not self.db_manager.connection:
+            return base_stats
+
+        try:
+            cursor = self.db_manager.connection.cursor(dictionary=True)
+
+            cursor.execute("""
+                SELECT 
+                    COUNT(DISTINCT source_file) AS unique_sources,
+                    AVG(chunk_size) AS avg_chunk_size
+                FROM document_chunks
+            """)
+            result = cursor.fetchone()
+
+            if result:
+                base_stats["unique_sources"] = result.get("unique_sources") or 0
+                base_stats["avg_chunk_size"] = round(float(result.get("avg_chunk_size") or 0), 2)
+
+        except Exception as e:
+            logger.error(f"Error getting extended system stats: {e}")
+
+        return base_stats
+    
+    
     def __del__(self):
         """Cleanup when object is destroyed"""
         if hasattr(self, 'db_manager') and self.db_manager:
